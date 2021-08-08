@@ -1,2 +1,2 @@
 # Pixel2D
-A simple 2D library for c++ built on SFML
+This is just a personal project, but feel free to use it and leave any suggestions.
