@@ -692,6 +692,45 @@ namespace p2d
         bool isModified = true;
     };
 
+    class atlasTexture
+    {
+    public:
+        atlasTexture()
+        {
+
+        }
+
+        atlasTexture(int x, int y, int w, int h)
+        {
+            this->x = x;
+            this->y = y;
+            this->w = w;
+            this->h = h;
+        }
+
+        void setAtlasTexture(int x, int y, int w, int h)
+        {
+            this->x = x;
+            this->y = y;
+            this->w = w;
+            this->h = h;
+        }
+
+        sf::Vector2i getAtlasTexturePos()
+        {
+            return {x, y};
+        }
+
+        sf::Vector2i getAtlasTextureSize()
+        {
+            return {w, h};
+        }
+
+    private:
+        int x, y;
+        int w, h;
+    };
+
     class atlasSprite : public sprite
     {
     public:
@@ -746,6 +785,14 @@ namespace p2d
         int getAtlasPosH()
         {
             return atlasH;
+        }
+
+        void setAtlasTexture(atlasTexture tex)
+        {
+            this->atlasX = tex.getAtlasTexturePos().x;
+            this->atlasY = tex.getAtlasTexturePos().y;
+            this->atlasW = tex.getAtlasTextureSize().x;
+            this->atlasH = tex.getAtlasTextureSize().y;
         }
 
         void setID(int newID)

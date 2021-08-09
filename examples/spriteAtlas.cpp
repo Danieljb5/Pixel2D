@@ -1,5 +1,7 @@
 #include "p2d.hpp"
 
+// this file is both an example of how to use the sprite atlas, as well as a simple benchmark to test how many sprites a machine can render with this library
+
 class Example : public p2d::Application
 {
 public:
@@ -36,8 +38,7 @@ public:
                 vys.push_back(100);
                 colours.push_back(util.random());
                 p2d::atlasSprite* spr = new p2d::atlasSprite();
-                spr->setAtlasPos(0, 0);
-                spr->setAtlasSize(218, 153);
+                spr->setAtlasTexture(tex);
                 spr->setSize(218, 153);
                 spr->setPos(util.randomFloat(0, screenWidth() - 218), util.randomFloat(0, screenHeight() - 153));
                 sprites.push_back(spr);
@@ -89,6 +90,8 @@ public:
     bool canAddSprites = true;
     int j = 0;
     int sprID;
+
+    p2d::atlasTexture tex = {0, 0, 218, 153};
 };
 
 int main()
