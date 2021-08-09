@@ -1083,6 +1083,11 @@ namespace p2d
         // internal call for improving draw efficiency
         int update(int drawCalls, int drawCallLimit)
         {
+            camX = camera.getCenter().x;
+            camY = camera.getCenter().y;
+            camW = camera.getSize().x;
+            camH = camera.getSize().y;
+
             int deltaDrawCalls = 0;
             for(int i = 0; i < 32; i++)
             {                
@@ -1150,6 +1155,7 @@ namespace p2d
         sf::Texture textureAtlas;
         Util util;
         sf::View camera;
+        int camX = 0, camY = 0, camW = 0, camH = 0;
 
         virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const
         {
@@ -1173,7 +1179,7 @@ namespace p2d
 
         bool isOnScreen(atlasSprite* spr)
         {
-            return !(spr->getX() >= camera.getCenter().x + (camera.getSize().x / 2.f) || spr->getX() + spr->getWidth() < camera.getCenter().x - (camera.getSize().x / 2.f) || spr->getY() >= camera.getCenter().y + (camera.getSize().y / 2.f) || spr->getY() + spr->getHeight() < camera.getCenter().y - (camera.getSize().y / 2.f));
+            return !(spr->getX() >= camX + (camW / 2.f) || spr->getX() + spr->getWidth() < camX - (camW / 2.f) || spr->getY() >= camY + (camH / 2.f) || spr->getY() + spr->getHeight() < camY - (camH / 2.f));
         }
     };
 
