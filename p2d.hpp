@@ -1097,6 +1097,7 @@ namespace p2d
 
                     if(spr->getModified())
                     {
+                        if(deltaDrawCalls + drawCalls >= drawCallLimit) break;
                         if(isOnScreen(spr) && deltaDrawCalls + drawCalls < drawCallLimit)
                         {
                             if(renderedSprites[i].count(spr->getID()) == 0)

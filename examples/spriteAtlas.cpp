@@ -24,9 +24,10 @@ public:
 
     void onUpdate() override
     {
-        if(frameRate() > 60 && canAddSprites)
+        int fps = frameRate();
+        if(fps > 60 && canAddSprites)
         {
-            numSprites += 10;
+            numSprites += fps - 60;
         }
 
         if(canAddSprites)
@@ -55,6 +56,7 @@ public:
         clear();
 
         appName = "Example Sprite Atlas | Sprites: " + std::to_string(numSprites);
+        console.log(std::to_string(numSprites).c_str());
     }
 
     std::vector<float> vxs;
