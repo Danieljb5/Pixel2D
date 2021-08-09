@@ -1,6 +1,8 @@
 #include "p2d.hpp"
 
 // this file is both an example of how to use the sprite atlas, as well as a simple benchmark to test how many sprites a machine can render with this library
+// it keeps adding new sprites until the framerate drops to 60 fps
+// warning: this example can run out of memory before it has stopped adding sprites
 
 class Example : public p2d::Application
 {
