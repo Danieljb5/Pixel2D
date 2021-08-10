@@ -1092,10 +1092,9 @@ namespace p2d
             for(int i = 0; i < 32; i++)
             {                
                 if(sprites[i].size() == 0) continue;                
-                int countChanged = 0;                
                 auto it = sprites[i].begin();
                 deltaDrawCalls += renderedSprites[i].size();
-                for(int j = 0; j < sprites[i].size(); j++)
+                for(int j = 0; j < (int)sprites[i].size(); j++)
                 {                    
                     if(it == sprites[i].end()) break;
                     atlasSprite* spr = it->second;                        
@@ -1124,7 +1123,7 @@ namespace p2d
                 vertices[i].resize(renderedSprites[i].size() * 4);
                 
                 it = renderedSprites[i].begin();
-                for(int j = 0; j < renderedSprites[i].size(); j++)
+                for(int j = 0; j < (int)renderedSprites[i].size(); j++)
                 {   
                     if(it == sprites[i].end()) break;
 
@@ -1137,10 +1136,10 @@ namespace p2d
                     quad[2].position = {spr->getX() + spr->getWidth(), spr->getY() + spr->getHeight()};
                     quad[3].position = {spr->getX(), spr->getY() + spr->getHeight()};
 
-                    quad[0].texCoords = {spr->getAtlasPosX(), spr->getAtlasPosY()};
-                    quad[1].texCoords = {spr->getAtlasPosX() + spr->getAtlasPosW(), spr->getAtlasPosY()};
-                    quad[2].texCoords = {spr->getAtlasPosX() + spr->getAtlasPosW(), spr->getAtlasPosY() + spr->getAtlasPosH()};
-                    quad[3].texCoords = {spr->getAtlasPosX(), spr->getAtlasPosY() + spr->getAtlasPosH()};
+                    quad[0].texCoords = {(float)spr->getAtlasPosX(), (float)spr->getAtlasPosY()};
+                    quad[1].texCoords = {(float)(spr->getAtlasPosX() + spr->getAtlasPosW()), (float)spr->getAtlasPosY()};
+                    quad[2].texCoords = {(float)(spr->getAtlasPosX() + spr->getAtlasPosW()), (float)(spr->getAtlasPosY() + spr->getAtlasPosH())};
+                    quad[3].texCoords = {(float)spr->getAtlasPosX(), (float)(spr->getAtlasPosY() + spr->getAtlasPosH())};
 
                     it++;
                 }
