@@ -1,4 +1,7 @@
 :: Create a PATH variable pointing to the directory that contains g++.exe
+:: Make sure you are using MinGW 64 bit
+:: To build an example, run the script with the name of the example excluding the file extension
+:: e.g. buildExamples.bat example
 
 mkdir build
 copy ..\bin build
