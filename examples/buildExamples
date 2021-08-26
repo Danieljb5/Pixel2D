@@ -7,7 +7,7 @@ then
     for i in $(ls *.cpp)
     do
       g++ -c $i -I ../ -I ../asio-1.18.2/include -I . -w -lpthread -g -Wall -Wextra -Werror -pedantic -std=c++17
-      g++ -O *.o -o build/${i%*.cpp} -I ../ -I ../asio-1.18.2/include -I src/source -I src/headers -lsfml-graphics -lsfml-window -lsfml-system -lpthread -g -Wall -Wextra -Werror -pedantic -std=c++17
+      g++ -O *.o -o build/${i%*.cpp} -I ../ -I ../asio-1.18.2/include -I . -lsfml-graphics -lsfml-window -lsfml-system -lpthread -g -Wall -Wextra -Werror -pedantic -std=c++17
       rm *.o
       echo "#!/bin/bash" > build/${i%*.cpp}.sh
       echo "cd \$0" >> build/${i%*.cpp}.sh
@@ -21,7 +21,7 @@ then
     for i in $@
     do
       g++ -c $i -I ../ -I ../asio-1.18.2/include -I . -w -lpthread -g -Wall -Wextra -Werror -pedantic -std=c++17
-      g++ -O *.o -o build/${i%*.cpp} -I ../ -I ../asio-1.18.2/include -I src/source -I src/headers -lsfml-graphics -lsfml-window -lsfml-system -lpthread -g -Wall -Wextra -Werror -pedantic -std=c++17
+      g++ -O *.o -o build/${i%*.cpp} -I ../ -I ../asio-1.18.2/include -I . -lsfml-graphics -lsfml-window -lsfml-system -lpthread -g -Wall -Wextra -Werror -pedantic -std=c++17
       rm *.o
       echo "#!/bin/bash" > build/${i%*.cpp}.sh
       echo "cd \$0" >> build/${i%*.cpp}.sh
