@@ -334,12 +334,12 @@ namespace p2d
 
         struct Date
         {
-            uint year = 0;
-            uint month = 0;
-            uint day = 0;
-            uint hour = 0;
-            uint minute = 0;
-            uint second = 0;
+            uint64_t year = 0;
+            uint64_t month = 0;
+            uint64_t day = 0;
+            uint64_t hour = 0;
+            uint64_t minute = 0;
+            uint64_t second = 0;
 
             friend std::ostream& operator<<(std::ostream& os, Date d)
             {
@@ -350,7 +350,7 @@ namespace p2d
 
         float dt;
 
-        // \brief Returns the time sincre launching the application in seconds
+        // \brief Returns the time since launching the application in seconds
         float time()
         {
             return clock.getElapsedTime().asSeconds();
@@ -1053,11 +1053,9 @@ namespace p2d
     class SpriteBuffer : public sf::Drawable, public sf::Transformable
     {
     public:
-        SpriteBuffer() {}
-
-        SpriteBuffer(sf::View &camera)
+        SpriteBuffer(bool quickRender = true)
         {
-            this->camera = camera;
+            this->fastRender = quickRender;
             for(int i = 0; i < 32; i++)
             {
                 vertices[i].setPrimitiveType(sf::Quads);
@@ -1080,14 +1078,22 @@ namespace p2d
             return true;
         }
 
+        void cameraChanged()
+        {
+            camChanged = true;
+        }
+
+        void setCamPos(int camX, int camY, int camW, int camH)
+        {
+            this->camX = camX;
+            this->camY = camY;
+            this->camW = camW;
+            this->camH = camH;
+        }
+
         // internal call for improving draw efficiency
         int update(int drawCalls, int drawCallLimit)
         {
-            camX = camera.getCenter().x;
-            camY = camera.getCenter().y;
-            camW = camera.getSize().x;
-            camH = camera.getSize().y;
-
             int deltaDrawCalls = 0;
             for(int i = 0; i < 32; i++)
             {                
@@ -1099,9 +1105,9 @@ namespace p2d
                     if(it == sprites[i].end()) break;
                     atlasSprite* spr = it->second;                        
 
-                    if(spr->getModified())
+                    if(spr->getModified() || camChanged)
                     {
-                        if(deltaDrawCalls + drawCalls >= drawCallLimit) break;
+                        if(fastRender) if(deltaDrawCalls + drawCalls >= drawCallLimit) break;
                         if(isOnScreen(spr) && deltaDrawCalls + drawCalls < drawCallLimit)
                         {
                             if(renderedSprites[i].count(spr->getID()) == 0)
@@ -1118,9 +1124,12 @@ namespace p2d
                     }
                     it++;
                 }
+                camChanged = false;
             
                 if(renderedSprites[i].size() == 0) continue;
                 vertices[i].resize(renderedSprites[i].size() * 4);
+
+                std::cout << std::to_string(renderedSprites[i].size()) << "\n";
                 
                 it = renderedSprites[i].begin();
                 for(int j = 0; j < (int)renderedSprites[i].size(); j++)
@@ -1154,6 +1163,7 @@ namespace p2d
         sf::Texture textureAtlas;
         Util util;
         sf::View camera;
+        bool fastRender = false, camChanged = false;
         int camX = 0, camY = 0, camW = 0, camH = 0;
 
         virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const
@@ -1227,7 +1237,6 @@ namespace p2d
             camera.zoom(1);
             console = {time};
             assets = {console, util};
-            spriteBuffer = {camera};
             this->drawCallLimit = drawCallLimit;
             this->cullingEnabled = cullingEnabled;
             onCreate();
@@ -1263,6 +1272,7 @@ namespace p2d
 
                 onUpdate();
 
+                spriteBuffer.setCamPos(camera.getCenter().x, camera.getCenter().y, camera.getSize().x, camera.getSize().y);
                 drawCalls += spriteBuffer.update(drawCalls, drawCallLimit);
                 window.draw(spriteBuffer);
 
@@ -1356,14 +1366,14 @@ namespace p2d
         {
             if(drawCalls < drawCallLimit)
             {
-                drawCalls++;
-
                 if(culling && cullingEnabled)
                 {
                     if(drawMode == topLeft) if(x + w < camera.getCenter().x - (camera.getSize().x / 2.f) || x > camera.getCenter().x + (camera.getSize().x / 2.f) || y + h < camera.getCenter().y - (camera.getSize().y / 2.f) || y > camera.getCenter().y + (camera.getSize().y / 2.f)) return;
                     if(drawMode == center) if(x + (w / 2.f) < camera.getCenter().x - (camera.getSize().x / 2.f) || x - (w / 2.f) > camera.getCenter().x + (camera.getSize().x / 2.f) || y + (h / 2.f) < camera.getCenter().y - (camera.getSize().y / 2.f) || y - (h / 2.f) > camera.getCenter().y + (camera.getSize().y / 2.f)) return;
                 }
                 
+                drawCalls++;
+
                 sf::RectangleShape rect({(float)w, (float)h});
                 rect.setPosition({(float)x, (float)y});
                 rect.setOutlineThickness(stroke);
@@ -1384,13 +1394,13 @@ namespace p2d
         {
             if(drawCalls < drawCallLimit)
             {
-                drawCalls++;
-
                 if(culling && cullingEnabled)
                 {
                     if(drawMode == topLeft) if(x + w < camera.getCenter().x - (camera.getSize().x / 2.f) || x > camera.getCenter().x + (camera.getSize().x / 2.f) || y + h < camera.getCenter().y - (camera.getSize().y / 2.f) || y > camera.getCenter().y + (camera.getSize().y / 2.f)) return;
                     if(drawMode == center) if(x + (w / 2.f) < camera.getCenter().x - (camera.getSize().x / 2.f) || x - (w / 2.f) > camera.getCenter().x + (camera.getSize().x / 2.f) || y + (h / 2.f) < camera.getCenter().y - (camera.getSize().y / 2.f) || y - (h / 2.f) > camera.getCenter().y + (camera.getSize().y / 2.f)) return;
                 }
+
+                drawCalls++;
 
                 sf::RectangleShape rect({(float)w, (float)h});
                 rect.setPosition({(float)x, (float)y});
@@ -1429,13 +1439,13 @@ namespace p2d
         {
             if(drawCalls < drawCallLimit)
             {
-                drawCalls++;
-
                 if(culling && cullingEnabled)
                 {
                     if(drawMode == topLeft) if(x + (r * 2) < camera.getCenter().x - (camera.getSize().x / 2.f) || x > camera.getCenter().x + (camera.getSize().x / 2.f) || y + (r * 2) < camera.getCenter().y - (camera.getSize().y / 2.f) || y > camera.getCenter().y + (camera.getSize().y / 2.f)) return;
                     if(drawMode == center) if(x + r < camera.getCenter().x - (camera.getSize().x / 2.f) || x - r > camera.getCenter().x + (camera.getSize().x / 2.f) || y + r < camera.getCenter().y - (camera.getSize().y / 2.f) || y - r > camera.getCenter().y + (camera.getSize().y / 2.f)) return;
                 }
+
+                drawCalls++;
 
                 sf::CircleShape circle((float)r);
                 circle.setOutlineThickness(stroke);
@@ -1454,13 +1464,13 @@ namespace p2d
         {
             if(drawCalls < drawCallLimit)
             {
-                drawCalls++;
-                
                 if(culling && cullingEnabled)
                 {
                     if(drawMode == topLeft) if(x + (r * 2) < camera.getCenter().x - (camera.getSize().x / 2.f) || x > camera.getCenter().x + (camera.getSize().x / 2.f) || y + (r * 2) < camera.getCenter().y - (camera.getSize().y / 2.f) || y > camera.getCenter().y + (camera.getSize().y / 2.f)) return;
                     if(drawMode == center) if(x + r < camera.getCenter().x - (camera.getSize().x / 2.f) || x - r > camera.getCenter().x + (camera.getSize().x / 2.f) || y + r < camera.getCenter().y - (camera.getSize().y / 2.f) || y - r > camera.getCenter().y + (camera.getSize().y / 2.f)) return;
                 }
+                
+                drawCalls++;
 
                 sf::CircleShape circle((float)r);
                 circle.setOutlineThickness(stroke);
@@ -1516,13 +1526,13 @@ namespace p2d
         {
             if(drawCalls < drawCallLimit)
             {
-                drawCalls++;
-
                 if(culling && cullingEnabled)
                 {
                     if(spr.getDrawMode() == topLeft) if(spr.getX() + spr.getWidth() < camera.getCenter().x - (camera.getSize().x / 2.f) || spr.getX() > camera.getCenter().x + (camera.getSize().x / 2.f) || spr.getY() + spr.getHeight() < camera.getCenter().y - (camera.getSize().y / 2.f) || spr.getY() > camera.getCenter().y + (camera.getSize().y / 2.f)) return;
                     if(spr.getDrawMode() == center) if(spr.getX() + (spr.getWidth() / 2.f) < camera.getCenter().x - (camera.getSize().x / 2.f) || spr.getX() - (spr.getWidth() / 2.f) > camera.getCenter().x + (camera.getSize().x / 2.f) || spr.getY() + (spr.getHeight() / 2.f) < camera.getCenter().y - (camera.getSize().y / 2.f) || spr.getY() - (spr.getHeight() / 2.f) > camera.getCenter().y + (camera.getSize().y / 2.f)) return;
                 }
+
+                drawCalls++;
                 
                 if(!spr.isValid())
                 {
@@ -1599,24 +1609,28 @@ namespace p2d
         void setCamX(int camX)
         {
             camera.setCenter(camX, camera.getCenter().y);
+            spriteBuffer.cameraChanged();
         }
 
         // \brief Sets the y position of the camera
         void setCamY(int camY)
         {
             camera.setCenter(camera.getCenter().x, camY);
+            spriteBuffer.cameraChanged();
         }
 
         // \brief Sets the position of the camera
         void setCamPos(int x, int y)
         {
             camera.setCenter(x, y);
+            spriteBuffer.cameraChanged();
         }
 
         // \brief Sets the position of the camera relative to its current position
         void moveCamera(int x, int y)
         {
             camera.move(x, y);
+            spriteBuffer.cameraChanged();
         }
 
         // \brief Sets the zoom of the camera
@@ -1625,6 +1639,7 @@ namespace p2d
             camZoom = zoom + 1;
             camZoom = mathf.clamp(0.01f, 10.f, camZoom);
             camera.zoom(camZoom);
+            spriteBuffer.cameraChanged();
         }
 
         // \brief Adds to the zoom of the camera
@@ -1633,6 +1648,7 @@ namespace p2d
             camZoom += zoom;
             camZoom = mathf.clamp(0.01f, 10.f, camZoom);
             camera.zoom(camZoom);
+            spriteBuffer.cameraChanged();
         }
 
         void startPan()
@@ -1648,6 +1664,7 @@ namespace p2d
             camera.move(posx - startMX, posy - startMY);
             startMX = posx;
             startMY = posy;
+            spriteBuffer.cameraChanged();
         }
 
         int getCamX()
@@ -1712,14 +1729,12 @@ namespace p2d
         Time time;
         // \brief Maths functions
         Math mathf;
-        // \brief Camera control
-        sf::View camera;
         // \brief Console handler
         Console console;
         // \brief Asset manager
         Assets assets;
         // \brief A fast way to draw multiple sprites
-        SpriteBuffer spriteBuffer;
+        SpriteBuffer spriteBuffer = {};
 
     private:
         int sWidth, sHeight;
@@ -1735,6 +1750,7 @@ namespace p2d
         int drawCallLimit = 1000;
         int drawCalls;
         bool cullingEnabled = true;
+        sf::View camera;
 
         sf::Color fromInt(int colour)
         {

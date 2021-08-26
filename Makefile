@@ -1,5 +1,5 @@
 # makefile - use to build projects
-OBJECTS = main.o
+OBJECTS = client.o
 SRC = src
 INCLUDE = include
 COPYFOLDERS = assets
@@ -16,7 +16,7 @@ $(BUILDDIR)/$(BUILDFILE): $(OBJECTS)
 	cp $(COPYFOLDERS) $(BUILDDIR) -r
 	rm *.o
 	
-%.o: %.cpp
+%.o: $(SRC)/%.cpp
 	g++ $(PARAMS) -o $@ -c $<
 	
 .PHONY: clean

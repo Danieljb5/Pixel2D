@@ -231,12 +231,15 @@ namespace p2d
                             }
                         }
                     );
+                    return true;
                 }
+                return false;
             }
 
             bool disconnect()
             {
                 if(isConnected()) asio::post(m_asioContext, [this]() { m_socket.close(); });
+                return true;
             }
 
             bool isConnected() const
@@ -254,12 +257,15 @@ namespace p2d
                         if(!writingMessage) writeHeader();
                     }
                 );
+                return true;
             }
             
             asio::ip::tcp::socket* getSocket()
             {
             	return &m_socket;
             }
+
+            float versionNumber = 1.0;
 
         private:
             void readHeader()
@@ -371,10 +377,12 @@ namespace p2d
                 uint64_t out;
                 input &= input >> 1;
                 out = input ^ (input << 16) + 63512465;
-                out *= out;
+                out *= out * (versionNumber << 3);
                 out += input << 16;
-                out /= input ;
+                out /= input;
+                out += versionNumber;
                 out &= input ^ (input * (out ^ input));
+                out ^= versionNumber;
                 out ^= 0x01574185AB54;
                 return out >> 16;
             }
@@ -452,9 +460,9 @@ namespace p2d
         class client_interface
         {
         public:
-            client_interface() : m_socket(m_context)
+            client_interface(float versionNumber = 1.0) : m_socket(m_context)
             {
-
+                m_connection->versionNumber = versionNumber;
             }
 
             virtual ~client_interface()
@@ -501,6 +509,7 @@ namespace p2d
             bool sendMessage(const message<T> &msg)
             {
                 m_connection->send(msg);
+                return true;
             }
 
             ts_queue<owned_message<T>>& incoming()
@@ -522,10 +531,10 @@ namespace p2d
         class server_interface
         {
         public:
-            server_interface(uint16_t port)
+            server_interface(uint16_t port, float versionNumber = 1.0)
                 : m_asioAcceptor(m_asioContext, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port))
             {
-                
+                this->versionNumber = versionNumber;
             }
 
             virtual ~server_interface()
@@ -568,6 +577,7 @@ namespace p2d
                             std::shared_ptr<connection<T>> newconn = std::make_shared<connection<T>>(connection<T>::owner::server, m_asioContext, std::move(socket), m_qMessagesIn);
                             if(this->onClientConnect(newconn))
                             {
+                                newconn->versionNumber = this->versionNumber;
                                 m_deqConnections.push_back(std::move(newconn));
                                 int id = generateUniqueID();
                                 m_deqConnections.back()->connectToClient(this, id);
@@ -681,6 +691,7 @@ namespace p2d
             std::thread m_threadContext;
             asio::ip::tcp::acceptor m_asioAcceptor;
             std::vector<int> ids;
+            float versionNumber;
 
         private:
             int generateUniqueID()
