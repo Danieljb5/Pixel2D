@@ -1429,7 +1429,9 @@ class Drawable : public Script
 public:
     Drawable() : Script() {}
 
-    virtual void _render(sf::VertexArray* va, sf::RenderWindow* window) {}
+    virtual void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text) {}
+
+    bool lateRender = false;
 };
 
 class SpriteRenderer : public Drawable
@@ -1442,7 +1444,7 @@ public:
     }
     Sprite sprite;
 
-    void _render(sf::VertexArray* va, sf::RenderWindow* window) override
+    void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text) override
     {
         int prevVertices = va->getVertexCount();
         Vector2 spriteSize = sprite.size;
@@ -1696,12 +1698,13 @@ public:
         ColourPanel, SpritePanel
     };
 
-    void _render(sf::VertexArray* va, sf::RenderWindow* window) override
+    void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text) override
     {
+        Vector2 wSize = {window->getSize()};
+
         if(mode == ColourPanel)
         {
             sf::RectangleShape rect;
-            Vector2 wSize = {window->getSize()};
             Vector2 pos = {wSize.x * percentPosition.x, wSize.y * percentPosition.y};
             Vector2 scale = {wSize.x * percentScale.x, wSize.y * percentScale.y};
             rect.setPosition(pos.x, pos.y);
@@ -1714,8 +1717,8 @@ public:
         int prevVertices = va->getVertexCount();
         Vector2 spriteSize = sprite.size;
         Vector2 spritePos = sprite.pos;
-        Vector2 sprScale = {transform->scale.x * spriteSize.x, transform->scale.y * spriteSize.y};
-        Vector2 sprPos = {transform->position.x - (sprScale.x / 2.f), transform->position.y - (sprScale.y / 2.f)};
+        Vector2 sprScale = {wSize.x * percentScale.x, wSize.y * percentScale.y};
+        Vector2 sprPos = {wSize.x * (percentPosition.x - percentScale.x * 0.5f), wSize.y * (percentPosition.y - percentScale.y * 0.5f)};
         va->resize(prevVertices + 4);
         sf::Vertex* quad = &va[0][prevVertices];
         quad[0].position = {sprPos.x, sprPos.y};
@@ -1745,23 +1748,23 @@ public:
         }
     }
 
-    void _render(sf::VertexArray* va, sf::RenderWindow* window) override
+    void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text) override
     {
-        sf::Text text;
-        text.setCharacterSize(fontSize);
-        text.setString(this->text);
+        sf::Text text1;
+        text1.setCharacterSize(fontSize);
+        text1.setString(this->text);
         Vector2 wSize = {window->getSize()};
         Vector2 pos = {wSize.x * percentPosition.x, wSize.y * percentPosition.y};
-        text.setPosition(pos.x, pos.y);
-        text.setFont(font);
-        text.setColor(colour);
+        text1.setPosition(pos.x, pos.y);
+        text1.setFont(font);
+        text1.setColor(colour);
         if(centred)
         {
-            float w = text.getLocalBounds().width;
-            float h = text.getLocalBounds().height;
-            text.setOrigin(w / 2.f, h / 2.f);
+            float w = text1.getLocalBounds().width;
+            float h = text1.getLocalBounds().height;
+            text1.setOrigin(w / 2.f, h / 2.f);
         }
-        window->draw(text);
+        text->push_back(text1);
     }
 
     bool centred = true;
@@ -1785,7 +1788,7 @@ public:
         ColourButton, SpriteButton
     };
 
-    void _render(sf::VertexArray* va, sf::RenderWindow* window) override
+    void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text) override
     {
         wSize = {window->getSize()};
 
@@ -1804,8 +1807,8 @@ public:
         int prevVertices = va->getVertexCount();
         Vector2 spriteSize = sprite.size;
         Vector2 spritePos = sprite.pos;
-        Vector2 sprScale = {transform->scale.x * spriteSize.x, transform->scale.y * spriteSize.y};
-        Vector2 sprPos = {transform->position.x - (sprScale.x / 2.f), transform->position.y - (sprScale.y / 2.f)};
+        Vector2 sprScale = {wSize.x * percentScale.x, wSize.y * percentScale.y};
+        Vector2 sprPos = {wSize.x * (percentPosition.x - percentScale.x * 0.5f), wSize.y * (percentPosition.y - percentScale.y * 0.5f)};
         va->resize(prevVertices + 4);
         sf::Vertex* quad = &va[0][prevVertices];
         quad[0].position = {sprPos.x, sprPos.y};
@@ -1856,7 +1859,7 @@ public:
         ColourToggle, SpriteToggle
     };
 
-    void _render(sf::VertexArray* va, sf::RenderWindow* window) override
+    void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text) override
     {
         wSize = {window->getSize()};
 
@@ -1892,8 +1895,8 @@ public:
         }
         Vector2 spriteSize = sprite.size;
         Vector2 spritePos = sprite.pos;
-        Vector2 sprScale = {transform->scale.x * spriteSize.x, transform->scale.y * spriteSize.y};
-        Vector2 sprPos = {transform->position.x - (sprScale.x / 2.f), transform->position.y - (sprScale.y / 2.f)};
+        Vector2 sprScale = {wSize.x * percentScale.x, wSize.y * percentScale.y};
+        Vector2 sprPos = {wSize.x * (percentPosition.x - percentScale.x * 0.5f), wSize.y * (percentPosition.y - percentScale.y * 0.5f)};
         va->resize(prevVertices + 4);
         sf::Vertex* quad = &va[0][prevVertices];
         quad[0].position = {sprPos.x, sprPos.y};
@@ -1953,7 +1956,7 @@ public:
         ColourField, SpriteField
     };
 
-    void _render(sf::VertexArray* va, sf::RenderWindow* window) override
+    void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text) override
     {
         wSize = {window->getSize()};
 
@@ -1990,8 +1993,8 @@ public:
             }
             Vector2 spriteSize = sprite.size;
             Vector2 spritePos = sprite.pos;
-            Vector2 sprScale = {transform->scale.x * spriteSize.x, transform->scale.y * spriteSize.y};
-            Vector2 sprPos = {transform->position.x - (sprScale.x / 2.f), transform->position.y - (sprScale.y / 2.f)};
+            Vector2 sprScale = {wSize.x * percentScale.x, wSize.y * percentScale.y};
+            Vector2 sprPos = {wSize.x * (percentPosition.x - percentScale.x * 0.5f), wSize.y * (percentPosition.y - percentScale.y * 0.5f)};
             va->resize(prevVertices + 4);
             sf::Vertex* quad = &va[0][prevVertices];
             quad[0].position = {sprPos.x, sprPos.y};
@@ -2003,21 +2006,21 @@ public:
             quad[2].texCoords = {spritePos.x + spriteSize.x, spritePos.y + spriteSize.y};
             quad[3].texCoords = {spritePos.x, spritePos.y + spriteSize.y};
         }
-        sf::Text text;
-        text.setCharacterSize(fontSize);
-        text.setString(this->value);
+        sf::Text text1;
+        text1.setCharacterSize(fontSize);
+        text1.setString(this->value);
         Vector2 wSize = {window->getSize()};
         Vector2 pos = {wSize.x * percentPosition.x, wSize.y * percentPosition.y};
-        text.setPosition(pos.x, pos.y);
-        text.setFont(font);
-        text.setColor(textColour);
+        text1.setPosition(pos.x, pos.y);
+        text1.setFont(font);
+        text1.setColor(textColour);
         if(centred)
         {
-            float w = text.getLocalBounds().width;
-            float h = text.getLocalBounds().height;
-            text.setOrigin(w / 2.f, h / 2.f);
+            float w = text1.getLocalBounds().width;
+            float h = text1.getLocalBounds().height;
+            text1.setOrigin(w / 2.f, h / 2.f);
         }
-        window->draw(text);
+        text->push_back(text1);
     }
 
     void Update() override
@@ -2191,6 +2194,10 @@ public:
 
     void _update()
     {
+        if(!enabled)
+        {
+            return;
+        }
         for(int i = 0; i < components.size(); i++)
         {
             components[i]->simulated = simulated;
@@ -2224,6 +2231,10 @@ public:
 
     void _qt(QuadTree* qt)
     {
+        if(!enabled)
+        {
+            return;
+        }
         Vector2 halfDim;
         if(HasComponent<SpriteRenderer>()) halfDim = GetComponent<SpriteRenderer>()->sprite.size;
         halfDim.x /= 2.f;
@@ -2239,21 +2250,22 @@ public:
         }
     }
 
-    void _render(sf::VertexArray* va, sf::RenderWindow* window)
+    void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text)
     {
+        if(!enabled)
+        {
+            return;
+        }
         if(!HasComponent<Drawable>())
         {
             return;
         }
-        Drawable* drawable = GetComponent<Drawable>();
-        if(drawable != nullptr)
+        for(int i = 0; i < components.size(); i++)
         {
-            drawable->_render(va, window);
-        }
-        else
-        {
-            std::cout << "Error: Sprite renderer does not exist" << std::endl;
-            exit(1);
+            if(dynamic_cast<Drawable*>(components[i]) != nullptr)
+            {
+                dynamic_cast<Drawable*>(components[i])->_render(va, window, text);
+            }
         }
     }
 
@@ -2419,9 +2431,9 @@ private:
     sf::View* camera;
     sf::Texture tex;
     bool texLoaded = false;
-    sf::VertexArray* va;
     float simulatedInterval = 0, simulatedTimer = 0; int simulatedIT = 0;
     float emulatedInterval = 0, emulatedTimer = 0; int emulatedIT = 0;
+    float targetFPS = 60.0f;
 
     void start()
     {
@@ -2440,6 +2452,7 @@ private:
         time.deltaTime = 1;
         float timer = 0;
         float refreshTimer = 0;
+        float frameTimer = 0;
         float fpsLast = 0;
         qt = new QuadTree({{0, 0}, {100000, 100000}});
         input._setup();
@@ -2467,7 +2480,7 @@ private:
                 }
                 for(int i = 0; i < gameObjects.size(); i++)
                 {
-                    if(!gameObjects[i]->simulated) gameObjectsEmulated.push_back(gameObjects[i]);
+                    if(!gameObjects[i]->simulated && gameObjects[i]->enabled) gameObjectsEmulated.push_back(gameObjects[i]);
                 }
                 refreshTimer -= simulatedTargetDeltaTime;
             }
@@ -2524,7 +2537,7 @@ private:
             OnUpdate();
             for(int i = 0; i < gameObjects.size(); i++)
             {
-                gameObjects[i]->_timer += time.deltaTime;
+                if(gameObjects[i]->enabled) gameObjects[i]->_timer += time.deltaTime;
             }
             if(gameObjectsSimulated.size() > 0)
             {
@@ -2553,27 +2566,38 @@ private:
 
 
             //rendering
-            window.setView(*camera);
-            window.clear(bgColour);
-            va = new sf::VertexArray(sf::Quads, 0);
-            std::vector<GameObject*> renderedObjects = qt->queryRange({camera->getCenter(), {camera->getSize()}});
-            for(int i = 0; i < renderedObjects.size(); i++)
+            if(frameTimer >= (1.f / targetFPS))
             {
-                renderedObjects[i]->_render(va, &window);
-            }
-            if(va->getVertexCount() > 0)
-            {
-                sf::RenderStates state = sf::RenderStates::Default;
-                if(texLoaded)
+                window.setView(*camera);
+                window.clear(bgColour);
+                sf::VertexArray* va = new sf::VertexArray(sf::Quads, 0);
+                std::vector<sf::Text>* text = new std::vector<sf::Text>();
+                std::vector<GameObject*> renderedObjects = qt->queryRange({camera->getCenter(), {camera->getSize()}});
+                for(int i = 0; i < renderedObjects.size(); i++)
                 {
-                    state.texture = &tex;
+                    renderedObjects[i]->_render(va, &window, text);
                 }
-                window.draw(&va[0][0], va->getVertexCount(), sf::Quads, state);
+                if(va->getVertexCount() > 0)
+                {
+                    sf::RenderStates state = sf::RenderStates::Default;
+                    if(texLoaded)
+                    {
+                        state.texture = &tex;
+                    }
+                    window.draw(&va[0][0], va->getVertexCount(), sf::Quads, state);
+                    std::cout << renderedObjects.size() << " | " << va->getVertexCount() << " | " << qt->getCountAll() << "\n";
 
-                tmpva = *va;
+                    tmpva = *va;
+                }
+                for(int i = 0; i < text->size(); i++)
+                {
+                    window.draw(text->at(i));
+                }
+                window.display();
+                delete va;
+                delete text;
+                frameTimer -= (1.f / targetFPS);
             }
-            window.display();
-            delete va;
 
 
             //time manager
@@ -2585,6 +2609,7 @@ private:
             refreshTimer += time.deltaTime;
             simulatedTimer += time.deltaTime;
             emulatedTimer += time.deltaTime;
+            frameTimer += time.deltaTime;
 
             timer += time.deltaTime;
             if(timer >= 0.5)
