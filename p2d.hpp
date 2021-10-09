@@ -752,7 +752,7 @@ private:
         int id = std::chrono::system_clock::now().time_since_epoch().count();
         while(count(ids, id) != false)
         {
-            id = id = std::chrono::system_clock::now().time_since_epoch().count();
+            id = std::chrono::system_clock::now().time_since_epoch().count();
         }
         return id;
     }
@@ -1344,6 +1344,7 @@ private:
 };
 
 class Transform;
+class Application;
 
 class Script
 {
@@ -1397,6 +1398,7 @@ public:
         return self->template HasComponent<T>();
     }
 
+    Application* app;
     sf::View* camera;
     Transform* transform;
     Time* time;
@@ -2081,8 +2083,6 @@ private:
     AABB bounds;
 };
 
-class Application;
-
 class GameObject
 {
 public:
@@ -2098,6 +2098,7 @@ public:
     {
         components.push_back(component);
 
+        component->app = app;
         component->_setup(camera, time, math, input, audio);
         component->self = this;
         component->transform = transform;
@@ -2125,13 +2126,16 @@ public:
                 return (T*)components[i];
             }
         }
-        std::cout << "Error: component not found" << std::endl;
+        String str = typeid(T).name();
+        std::cout << "Error: component of type '" << str << "' not found" << std::endl;
         exit(1);
     }
 
     void AddObject(GameObject* object)
     {
-        children.push_back(object);
+        uint32_t id = object->_generateUniqueID(children);
+        children.insert({id, object});
+        object->app = app;
         object->parent = this;
         if(!setup) return;
         object->_setup(camera, time, math, input, audio);
@@ -2139,24 +2143,16 @@ public:
         object->_start();
     }
 
-    void RemoveObject(GameObject* object)
+    void RemoveObject(GameObject* object, bool callOnDestroy = true)
     {
         if(object == nullptr) return;
-        auto it = children.begin();
-        while(it != children.end())
-        {
-            if(it.base()[0] == object)
-            {
-                children.erase(it);
-                object->_onDestroy();
-            }
-            it++;
-        }
+        if(callOnDestroy) object->_onDestroy();
+        children.erase(object->id);
     }
 
-    void Destroy()
+    void Destroy(bool callOnDestroy = true)
     {
-        parent->RemoveObject(this);
+        parent->RemoveObject(this, callOnDestroy);
     }
 
     void _onCreate()
@@ -2175,9 +2171,11 @@ public:
         {
             components[i]->OnDestroy();
         }
-        for(int i = 0; i < children.size(); i++)
+        auto it = children.begin();
+        while(it != children.end())
         {
-            children[i]->_onDestroy();
+            children[it->first]->_onDestroy();
+            it++;
         }
         components.clear();
     }
@@ -2204,11 +2202,13 @@ public:
             components[i]->dt = dt;
             components[i]->Update();
         }
-        for(int i = 0; i < children.size(); i++)
+        auto it = children.begin();
+        while(it != children.end())
         {
-            children[i]->simulated = simulated;
-            children[i]->dt = dt;
-            children[i]->_update();
+            children[it->first]->simulated = simulated;
+            children[it->first]->dt = dt;
+            children[it->first]->_update();
+            it++;
         }
     }
 
@@ -2244,9 +2244,11 @@ public:
             std::cout << "Error: could not insert object into the quadtree" << std::endl;
             // exit(2);
         }
-        for(int i = 0; i < children.size(); i++)
+        auto it = children.begin();
+        while(it != children.end())
         {
-            children[i]->_qt(qt);
+            children[it->first]->_qt(qt);
+            it++;
         }
     }
 
@@ -2269,6 +2271,23 @@ public:
         }
     }
 
+    uint32_t _generateUniqueID(std::map<uint32_t, GameObject*> objects)
+    {
+        uint32_t id = std::chrono::system_clock::now().time_since_epoch().count();
+        while(objects.count(id) != 0)
+        {
+            id += 0xe120fc15;
+            uint64_t tmp;
+            tmp = (uint64_t)id * 0x4a39b70d;
+            uint32_t m1 = (tmp >> 32) ^ tmp;
+            tmp = (uint64_t)m1 * 0x12fad5c9;
+            uint32_t m2 = (tmp >> 32) ^ tmp;
+            id = m2;
+        }
+        this->id = id;
+        return id;
+    }
+
     GameObject* parent;
     Application* app;
     sf::View* camera;
@@ -2277,13 +2296,14 @@ public:
     Math* math;
     Input* input;
     Audio* audio;
+    uint32_t id;
     float dt;
     bool simulated;
     float _timer;
     bool enabled = true;
 
 private:
-    std::vector<GameObject*> children;
+    std::map<uint32_t, GameObject*> children;
     std::vector<Script*> components;
     bool created = false, started = false, setup = false;
 };
@@ -2360,7 +2380,8 @@ public:
 
     void AddObject(GameObject* object)
     {
-        gameObjects.push_back(object);
+        uint32_t id = object->_generateUniqueID(gameObjects);
+        gameObjects.insert({id, object});
         object->simulated = true;
         object->parent = nullptr;
         object->app = this;
@@ -2372,29 +2393,8 @@ public:
     void RemoveObject(GameObject* object, bool callOnDestroy = true)
     {
         if(object == nullptr) return;
-        auto it = gameObjects.begin();
-        while(it != gameObjects.end())
-        {
-            if(it.base()[0] == object)
-            {
-                gameObjects.erase(it);
-                if(callOnDestroy) object->_onDestroy();
-                return;
-            }
-            it++;
-        }
-        it = gameObjectsEmulated.begin();
-        while(it != gameObjectsEmulated.end())
-        {
-            if(it.base()[0] == object)
-            {
-                gameObjectsEmulated.erase(it);
-                if(callOnDestroy) object->_onDestroy();
-                return;
-            }
-            it++;
-        }
-        
+        if(callOnDestroy) object->_onDestroy();
+        gameObjects.erase(object->id);
     }
 
     void Exit(int status = 0)
@@ -2420,11 +2420,9 @@ public:
     Input input;
     Audio audio;
 
-    sf::VertexArray tmpva;
-
 private:
     sf::RenderWindow window;
-    std::vector<GameObject*> gameObjects;
+    std::map<uint32_t, GameObject*> gameObjects;
     std::vector<GameObject*> gameObjectsSimulated;
     std::vector<GameObject*> gameObjectsEmulated;
     QuadTree* qt;
@@ -2465,22 +2463,24 @@ private:
             if(refreshTimer >= simulatedTargetDeltaTime)
             {
                 qt->clear();
-                for(int i = 0; i < gameObjects.size(); i++)
+                auto it = gameObjects.begin();
+                while(it != gameObjects.end())
                 {
-                    if(gameObjects[i]->enabled) gameObjects[i]->_qt(qt);
-                }
-                for(int i = 0; i < gameObjects.size(); i++)
-                {
-                    gameObjects[i]->simulated = false;
+                    if(gameObjects[it->first]->enabled) gameObjects[it->first]->_qt(qt);
+                    gameObjects[it->first]->simulated = false;
+                    it++;
                 }
                 gameObjectsSimulated = qt->queryRange(simulationDistance);
                 for(int i = 0; i < gameObjectsSimulated.size(); i++)
                 {
+                    if(gameObjectsSimulated[i] == nullptr) exit(2);
                     gameObjectsSimulated[i]->simulated = true;
                 }
-                for(int i = 0; i < gameObjects.size(); i++)
+                it = gameObjects.begin();
+                while(it != gameObjects.end())
                 {
-                    if(!gameObjects[i]->simulated && gameObjects[i]->enabled) gameObjectsEmulated.push_back(gameObjects[i]);
+                    if(!gameObjects[it->first]->simulated && gameObjects[it->first]->enabled) gameObjectsEmulated.push_back(gameObjects[it->first]);
+                    it++;
                 }
                 refreshTimer -= simulatedTargetDeltaTime;
             }
@@ -2531,20 +2531,23 @@ private:
 
 
             //update system
-            if(gameObjects.size() > 0) simulatedInterval = simulatedTargetDeltaTime / gameObjects.size();
+            if(gameObjectsSimulated.size() > 0) simulatedInterval = simulatedTargetDeltaTime / gameObjectsSimulated.size();
             if(gameObjectsEmulated.size() > 0) emulatedInterval = emulatedTargetDeltaTime / gameObjectsEmulated.size();
             simulationDistance.center = camera->getCenter();
             OnUpdate();
-            for(int i = 0; i < gameObjects.size(); i++)
+            auto it = gameObjects.begin();
+            while(it != gameObjects.end())
             {
-                if(gameObjects[i]->enabled) gameObjects[i]->_timer += time.deltaTime;
+                if(gameObjects[it->first]->enabled) gameObjects[it->first]->_timer += time.deltaTime;
+                it++;
             }
             if(gameObjectsSimulated.size() > 0)
             {
                 while(simulatedTimer >= simulatedInterval)
                 {
-                    if(simulatedIT >= gameObjects.size()) simulatedIT = 0;
-                    gameObjectsSimulated[simulatedIT]->dt = gameObjects[simulatedIT]->_timer;
+                    if(simulatedIT >= gameObjectsSimulated.size()) simulatedIT = 0;
+                    // std::cout << "UPDATE: " << simulatedIT << "\n";
+                    gameObjectsSimulated[simulatedIT]->dt = gameObjectsSimulated[simulatedIT]->_timer;
                     gameObjectsSimulated[simulatedIT]->_timer = 0;
                     gameObjectsSimulated[simulatedIT]->_update();
                     simulatedIT++;
@@ -2585,9 +2588,6 @@ private:
                         state.texture = &tex;
                     }
                     window.draw(&va[0][0], va->getVertexCount(), sf::Quads, state);
-                    std::cout << renderedObjects.size() << " | " << va->getVertexCount() << " | " << qt->getCountAll() << "\n";
-
-                    tmpva = *va;
                 }
                 for(int i = 0; i < text->size(); i++)
                 {

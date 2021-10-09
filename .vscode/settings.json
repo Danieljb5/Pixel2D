@@ -69,6 +69,7 @@
         "concepts": "cpp",
         "coroutine": "cpp",
         "ranges": "cpp",
-        "stop_token": "cpp"
+        "stop_token": "cpp",
+        "typeindex": "cpp"
     }
 }
