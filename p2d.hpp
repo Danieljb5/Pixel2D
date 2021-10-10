@@ -90,14 +90,36 @@ struct Vector2
         return vecA;
     }
 
-    float dot(Vector2 vec)
+    float Dot(Vector2 vec)
     {
         return (x * vec.x) + (y * vec.y);
     }
 
-    float mag()
+    float Mag()
     {
         return sqrt((x * x) + (y * y));
+    }
+
+    float MagSqr()
+    {
+        return ((x * x) + (y * y));
+    }
+
+    Vector2 Normal()
+    {
+        return {-y, x};
+    }
+
+    Vector2 Lerp(Vector2 destination, float percent)
+    {
+        Vector2 tmp;
+        tmp.x = destination.x - this->x;
+        tmp.y = destination.y - this->y;
+        tmp.x *= percent;
+        tmp.y *= percent;
+        this->x += tmp.x;
+        this->y += tmp.y;
+        return {x, y};
     }
 
     float x = 0;
@@ -152,6 +174,16 @@ struct Sprite
 
     Vector2 pos;
     Vector2 size;
+};
+
+struct DebugObj
+{
+    DebugObj() {}
+
+    sf::RectangleShape* rect = nullptr;
+    sf::CircleShape* circle = nullptr;
+    sf::Text* text = nullptr;
+    sf::VertexArray* va = nullptr;
 };
 
 
@@ -769,16 +801,6 @@ typedef std::string String;
 
 
 
-class NetworkServer
-{
-
-};
-
-class Network
-{
-
-};
-
 class File
 {
 public:
@@ -1060,6 +1082,13 @@ public:
     long double Sigmoid(double x)
     {
         return (long double)1.f / ((long double)1.f + (long double)std::pow((long double)e, (long double)-x));
+    }
+
+    float Lerp(float src, float dst, float percent)
+    {
+        float tmp = dst - src;
+        tmp *= percent;
+        return src + tmp;
     }
 
 private:
@@ -1431,9 +1460,10 @@ class Drawable : public Script
 public:
     Drawable() : Script() {}
 
-    virtual void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text) {}
+    virtual void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text, std::vector<DebugObj*>* debugDraw) {}
 
     bool lateRender = false;
+    bool debugDrawEnabled = false;
 };
 
 class SpriteRenderer : public Drawable
@@ -1446,7 +1476,7 @@ public:
     }
     Sprite sprite;
 
-    void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text) override
+    void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text, std::vector<DebugObj*>* debugDraw) override
     {
         int prevVertices = va->getVertexCount();
         Vector2 spriteSize = sprite.size;
@@ -1463,6 +1493,16 @@ public:
         quad[1].texCoords = {spritePos.x + spriteSize.x, spritePos.y};
         quad[2].texCoords = {spritePos.x + spriteSize.x, spritePos.y + spriteSize.y};
         quad[3].texCoords = {spritePos.x, spritePos.y + spriteSize.y};
+
+        if(debugDrawEnabled)
+        {
+            sf::RectangleShape* rect = new sf::RectangleShape();
+            rect->setPosition(sprPos.x, sprPos.y);
+            rect->setSize({sprPos.x + sprScale.x, sprPos.y + sprScale.y});
+            DebugObj* obj = new DebugObj();
+            obj->rect = rect;
+            debugDraw->push_back(obj);
+        }
     }
 };
 
@@ -1481,6 +1521,7 @@ public:
         Collision(Collider* c1, Collider* c2, float overlap, Vector2 axis)
         {
             Overlap = overlap;
+            if(overlap > 0) HasCollision = true;
             Axis = axis;
             this->c1 = c1;
             this->c2 = c2;
@@ -1529,8 +1570,8 @@ public:
             return;
         }
 
-        other->transform->position.x += collision.Axis.x * collision.Overlap * 0.5f;
-        other->transform->position.y += collision.Axis.y * collision.Overlap * 0.5f;
+        other->transform->position.x -= collision.Axis.x * collision.Overlap * 0.5f;
+        other->transform->position.y -= collision.Axis.y * collision.Overlap * 0.5f;
         transform->position.x += collision.Axis.x * collision.Overlap * 0.5f;
         transform->position.y += collision.Axis.y * collision.Overlap * 0.5f;
         
@@ -1562,9 +1603,10 @@ private:
             float minDst = f1 + f2;
 
             Vector2 delta = {v1.x - v2.x, v1.y - v2.y};
-            float dst = delta.mag();
+            float dst = delta.Mag();
 
-            if(dst < minDst)
+
+            if(dst < minDst && dst != 0)
             {
                 Vector2 axis;
                 axis.x = delta.x * (1 / dst);
@@ -1578,77 +1620,117 @@ private:
 
         if(Type == Poly && other->Type == Circle)
         {
-            double minDst = 0xFFFFFFFFFFFFFFFF;
-            Vector2 closestDelta = {};
-            Vector2 axis = {};
-
-            for(int i = 0; i < Vertices.size(); i++)
-            {
-                Vector2 vec = Vertices[i];
-
-                Vector2 worldVert = {v1.x + vec.x, v1.y + vec.y};
-
-                Vector2 delta = {worldVert.x - v2.x, worldVert.y - v2.y};
-
-                double dst = delta.mag();
-                if(dst < minDst)
-                {
-                    minDst = dst;
-                    closestDelta = delta;
-                }
-            }
-
-            double magnitude = closestDelta.mag();
-            if(magnitude != 0)
-            {
-                axis.x = closestDelta.x * (1 / magnitude);
-                axis.y = closestDelta.y * (1 / magnitude);
-                return {this, other, (magnitude - other->Radius), axis};
-            }
-
-            return {this, other, false};
+            return circleVsPoly({other->Centre.x + other->transform->position.x, other->Centre.y + other->transform->position.y}, other->Radius, {Centre.x + transform->position.x, Centre.y + transform->position.y}, Vertices, other);
         }
 
         if(Type == Circle && other->Type == Poly)
         {
-            double minDst = 0xFFFFFFFFFFFFFFFF;
-            Vector2 closestDelta = {};
-            Vector2 axis = {};
+            return circleVsPoly({Centre.x + transform->position.x, Centre.y + transform->position.y}, Radius, {other->Centre.x + other->transform->position.x, other->Centre.y + other->transform->position.y}, other->Vertices, other);
+        }
+    }
 
-            for(int i = 0; i < other->Vertices.size(); i++)
+    Collision circleVsPoly(Vector2 circlePos, float radius, Vector2 polyPos, std::vector<Vector2> polygon, Collider* other)
+    {
+        std::vector<Vector2> lines;
+        std::vector<Vector2> points1;
+        std::vector<Vector2> points2;
+
+        // setup lines and points
+        for(int i = 0; i < polygon.size(); i++)
+        {
+            Vector2 v1 = polygon[i];
+            Vector2 v2;
+            if(i == polygon.size() - 1) v2 = polygon[0];
+            else v2 = polygon[i + 1];
+            Vector2 line = {v1.x - v2.x, v1.y - v2.y};
+            lines.push_back(line);
+            points1.push_back({v1.x + polyPos.x, v1.y + polyPos.y});
+            points2.push_back({v2.x + polyPos.x, v2.y + polyPos.y});
+        }
+
+        for(int i = 0; i < lines.size(); i++)
+        {
+            Vector2 tmp = {points1[i].x - circlePos.x, points1[i].y - circlePos.y};
+            float a = tmp.Mag();
+            float b = lines[i].Mag();
+            tmp = {points2[i].x - circlePos.x, points2[i].y - circlePos.y};
+            float c = tmp.Mag();
+            float den = ((b * b) + (c * c) - (a * a));
+            float num = (2.f * b * c);
+            float cosA = den / num;
+            float A = acos(cosA); // A = cos^-1((b^2 + c^2 - a^2) / 2bc)
+            float sinA = sin(A);
+            float opposite = sinA * c; // opposite = sin(A) * hyp
+
+            if(opposite < radius) // collision
             {
-                Vector2 vec = other->Vertices[i];
-
-                Vector2 worldVert = {v2.x + vec.x, v2.y + vec.y};
-
-                Vector2 delta = {worldVert.x - v1.x, worldVert.y - v1.y};
-
-                double dst = delta.mag();
-                if(dst < minDst)
+                float cosA = cos(A);
+                float adjacent = cosA * c; // adjacent = cos(A) * hyp
+                float percent = adjacent / b;
+                Vector2 vec = points2[i];
+                Vector2 closestPoint = vec.Lerp(points1[i], percent);
+                Vector2 collisionAxis = {closestPoint.x - circlePos.x, closestPoint.y - circlePos.y};
+                float overlap = radius - collisionAxis.Mag();
+                float cmag = collisionAxis.Mag();
+                collisionAxis = {-collisionAxis.x / cmag, -collisionAxis.y / cmag};
+                if(overlap > 0)
                 {
-                    minDst = dst;
-                    closestDelta = delta;
+                    Vector2 v1 = points1[i];
+                    Vector2 v2 = points2[i];
+                    bool check1, check2;
+                    if(v1.x <= v2.x)
+                    {
+                        check1 = (v1.x <= closestPoint.x && closestPoint.x <= v2.x);
+                        std::cout << "1:1 " << check1 << "\n";
+                    }
+                    else
+                    {
+                        check1 = (v1.x >= closestPoint.x && closestPoint.x >= v2.x);
+                        std::cout << "1:2 " << check1 << "\n";
+                    }
+                    if(v1.y <= v2.y)
+                    {
+                        check2 = (v1.y <= closestPoint.y && closestPoint.y <= v2.y);
+                        std::cout << "2:1 " << check2 << "\n";
+                    }
+                    else
+                    {
+                        check2 = (v1.y >= closestPoint.y && closestPoint.y >= v2.y);
+                        std::cout << "2:2 " << check2 << "\n";
+                    }
+                    if(check1 && check2) return {this, other, overlap, collisionAxis};
+                    Vector2 d1 = {v1.x - circlePos.x, v1.y - circlePos.y};
+                    Vector2 d2 = {v2.x - circlePos.x, v2.y - circlePos.y};
+                    if(d1.Mag() < radius)
+                    {
+                        float dst = radius - d1.Mag();
+                        float d1mag = d1.Mag();
+                        d1.x /= -d1mag;
+                        d1.y /= -d1mag;
+                        return {this, other, dst, d1};
+                    }
+                    if(d2.Mag() < radius)
+                    {
+                        float dst = radius - d2.Mag();
+                        float d2mag = d2.Mag();
+                        d2.x /= -d2mag;
+                        d2.y /= -d2mag;
+                        return {this, other, dst, d2};
+                    }
                 }
             }
-
-            double magnitude = closestDelta.mag();
-            if(magnitude != 0)
-            {
-                axis.x = closestDelta.x * (1 / magnitude);
-                axis.y = closestDelta.y * (1 / magnitude);
-                return {this, other, (magnitude - Radius), axis};
-            }
-
-            return {this, other, false};
         }
+        return {this, other, false};
     }
 };
 
-// This will not work if there is not already a collider
+// This will not work if there is not already a collider when OnCreate() is called
 class RigidBody : public Script
 {
 public:
-    RigidBody() : Script()
+    RigidBody() : Script() {}
+
+    void OnCreate() override
     {
         if(!HasComponent<Collider>())
         {
@@ -1656,10 +1738,6 @@ public:
             exit(1);
         }
         collider = GetComponent<Collider>();
-    }
-
-    void OnCreate() override
-    {
         collider->_isStatic = false;
     }
 
@@ -1700,7 +1778,7 @@ public:
         ColourPanel, SpritePanel
     };
 
-    void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text) override
+    void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text, std::vector<DebugObj*>* debugDraw) override
     {
         Vector2 wSize = {window->getSize()};
 
@@ -1708,6 +1786,9 @@ public:
         {
             sf::RectangleShape rect;
             Vector2 pos = {wSize.x * percentPosition.x, wSize.y * percentPosition.y};
+            Vector2 camPos = camera->getCenter();
+            pos.x += camPos.x;
+            pos.y += camPos.y;
             Vector2 scale = {wSize.x * percentScale.x, wSize.y * percentScale.y};
             rect.setPosition(pos.x, pos.y);
             rect.setSize({scale.x, scale.y});
@@ -1721,6 +1802,9 @@ public:
         Vector2 spritePos = sprite.pos;
         Vector2 sprScale = {wSize.x * percentScale.x, wSize.y * percentScale.y};
         Vector2 sprPos = {wSize.x * (percentPosition.x - percentScale.x * 0.5f), wSize.y * (percentPosition.y - percentScale.y * 0.5f)};
+        Vector2 camPos = camera->getCenter();
+        sprPos.x += camPos.x;
+        sprPos.y += camPos.y;
         va->resize(prevVertices + 4);
         sf::Vertex* quad = &va[0][prevVertices];
         quad[0].position = {sprPos.x, sprPos.y};
@@ -1750,13 +1834,16 @@ public:
         }
     }
 
-    void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text) override
+    void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text, std::vector<DebugObj*>* debugDraw) override
     {
         sf::Text text1;
         text1.setCharacterSize(fontSize);
         text1.setString(this->text);
         Vector2 wSize = {window->getSize()};
         Vector2 pos = {wSize.x * percentPosition.x, wSize.y * percentPosition.y};
+        Vector2 camPos = camera->getCenter();
+        pos.x += camPos.x;
+        pos.y += camPos.y;
         text1.setPosition(pos.x, pos.y);
         text1.setFont(font);
         text1.setColor(colour);
@@ -1790,7 +1877,7 @@ public:
         ColourButton, SpriteButton
     };
 
-    void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text) override
+    void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text, std::vector<DebugObj*>* debugDraw) override
     {
         wSize = {window->getSize()};
 
@@ -1798,6 +1885,9 @@ public:
         {
             sf::RectangleShape rect;
             Vector2 pos = {wSize.x * (percentPosition.x - percentScale.x * 0.5f), wSize.y * (percentPosition.y - percentScale.y * 0.5f)};
+            Vector2 camPos = camera->getCenter();
+            pos.x += camPos.x;
+            pos.y += camPos.y;
             Vector2 scale = {wSize.x * percentScale.x, wSize.y * percentScale.y};
             rect.setPosition(pos.x, pos.y);
             rect.setSize({scale.x, scale.y});
@@ -1811,6 +1901,9 @@ public:
         Vector2 spritePos = sprite.pos;
         Vector2 sprScale = {wSize.x * percentScale.x, wSize.y * percentScale.y};
         Vector2 sprPos = {wSize.x * (percentPosition.x - percentScale.x * 0.5f), wSize.y * (percentPosition.y - percentScale.y * 0.5f)};
+        Vector2 camPos = camera->getCenter();
+        sprPos.x += camPos.x;
+        sprPos.y += camPos.y;
         va->resize(prevVertices + 4);
         sf::Vertex* quad = &va[0][prevVertices];
         quad[0].position = {sprPos.x, sprPos.y};
@@ -1861,7 +1954,7 @@ public:
         ColourToggle, SpriteToggle
     };
 
-    void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text) override
+    void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text, std::vector<DebugObj*>* debugDraw) override
     {
         wSize = {window->getSize()};
 
@@ -1869,6 +1962,9 @@ public:
         {
             sf::RectangleShape rect;
             Vector2 pos = {wSize.x * (percentPosition.x - percentScale.x * 0.5f), wSize.y * (percentPosition.y - percentScale.y * 0.5f)};
+            Vector2 camPos = camera->getCenter();
+            pos.x += camPos.x;
+            pos.y += camPos.y;
             Vector2 scale = {wSize.x * percentScale.x, wSize.y * percentScale.y};
             rect.setPosition(pos.x, pos.y);
             rect.setSize({scale.x, scale.y});
@@ -1899,6 +1995,9 @@ public:
         Vector2 spritePos = sprite.pos;
         Vector2 sprScale = {wSize.x * percentScale.x, wSize.y * percentScale.y};
         Vector2 sprPos = {wSize.x * (percentPosition.x - percentScale.x * 0.5f), wSize.y * (percentPosition.y - percentScale.y * 0.5f)};
+        Vector2 camPos = camera->getCenter();
+        sprPos.x += camPos.x;
+        sprPos.y += camPos.y;
         va->resize(prevVertices + 4);
         sf::Vertex* quad = &va[0][prevVertices];
         quad[0].position = {sprPos.x, sprPos.y};
@@ -1958,7 +2057,7 @@ public:
         ColourField, SpriteField
     };
 
-    void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text) override
+    void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text, std::vector<DebugObj*>* debugDraw) override
     {
         wSize = {window->getSize()};
 
@@ -1966,6 +2065,9 @@ public:
         {
             sf::RectangleShape rect;
             Vector2 pos = {wSize.x * (percentPosition.x - percentScale.x * 0.5f), wSize.y * (percentPosition.y - percentScale.y * 0.5f)};
+            Vector2 camPos = camera->getCenter();
+            pos.x += camPos.x;
+            pos.y += camPos.y;
             Vector2 scale = {wSize.x * percentScale.x, wSize.y * percentScale.y};
             rect.setPosition(pos.x, pos.y);
             rect.setSize({scale.x, scale.y});
@@ -1997,6 +2099,9 @@ public:
             Vector2 spritePos = sprite.pos;
             Vector2 sprScale = {wSize.x * percentScale.x, wSize.y * percentScale.y};
             Vector2 sprPos = {wSize.x * (percentPosition.x - percentScale.x * 0.5f), wSize.y * (percentPosition.y - percentScale.y * 0.5f)};
+            Vector2 camPos = camera->getCenter();
+            sprPos.x += camPos.x;
+            sprPos.y += camPos.y;
             va->resize(prevVertices + 4);
             sf::Vertex* quad = &va[0][prevVertices];
             quad[0].position = {sprPos.x, sprPos.y};
@@ -2242,7 +2347,17 @@ public:
         if(!qt->insert(this, AABB(transform->position, {halfDim.x * transform->scale.x, halfDim.y * transform->scale.y})))
         {
             std::cout << "Error: could not insert object into the quadtree" << std::endl;
-            // exit(2);
+            std::cout << "POSITION    | " << transform->position <<
+                       "\nSCALE       | " << transform->scale <<
+                       "\nROTATION    | " << transform->rotation <<
+                       "\nCOMPONENTS  | " << components.size() << std::endl;
+            for(int i = 0; i < components.size(); i++)
+            {
+                std::cout <<
+                       "\nCOMPONENT " << i << " |" << typeid(*components[i]).name();
+            }
+            std::cout << std::endl;
+            exit(2);
         }
         auto it = children.begin();
         while(it != children.end())
@@ -2252,7 +2367,7 @@ public:
         }
     }
 
-    void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text)
+    void _render(sf::VertexArray* va, sf::RenderWindow* window, std::vector<sf::Text>* text, std::vector<DebugObj*>* debugDraw)
     {
         if(!enabled)
         {
@@ -2266,7 +2381,7 @@ public:
         {
             if(dynamic_cast<Drawable*>(components[i]) != nullptr)
             {
-                dynamic_cast<Drawable*>(components[i])->_render(va, window, text);
+                dynamic_cast<Drawable*>(components[i])->_render(va, window, text, debugDraw);
             }
         }
     }
@@ -2385,7 +2500,7 @@ public:
         object->simulated = true;
         object->parent = nullptr;
         object->app = this;
-        object->_setup(camera, &time, &math, &input, &audio);
+        object->_setup(&camera, &time, &math, &input, &audio);
         object->_onCreate();
         object->_start();
     }
@@ -2426,7 +2541,7 @@ private:
     std::vector<GameObject*> gameObjectsSimulated;
     std::vector<GameObject*> gameObjectsEmulated;
     QuadTree* qt;
-    sf::View* camera;
+    sf::View camera;
     sf::Texture tex;
     bool texLoaded = false;
     float simulatedInterval = 0, simulatedTimer = 0; int simulatedIT = 0;
@@ -2455,7 +2570,7 @@ private:
         qt = new QuadTree({{0, 0}, {100000, 100000}});
         input._setup();
 
-        camera = new sf::View({0, 0}, {windowWidth, windowHeight});
+        camera = sf::View({0, 0}, {windowWidth, windowHeight});
 
         while(window.isOpen())
         {
@@ -2502,38 +2617,10 @@ private:
             }
 
 
-            //collision handler
-            std::vector<GameObject*> objsToCheck = qt->queryRange(simulationDistance);
-            std::vector<GameObject*> rbs;
-            for(int i = 0; i < objsToCheck.size(); i++)
-            {
-                if(objsToCheck[i]->HasComponent<RigidBody>())
-                {
-                    rbs.push_back(objsToCheck[i]);
-                }
-            }
-            for(int i = 0; i < rbs.size(); i++)
-            {
-                RigidBody* rb = rbs[i]->GetComponent<RigidBody>();
-                Vector2 pos = {rb->transform->position.x + rb->collider->Centre.x, rb->transform->position.y + rb->collider->Centre.y};
-                Vector2 size = {rb->transform->scale.x * rb->collider->Scale.x, rb->transform->scale.y * rb->collider->Scale.y};
-                std::vector<GameObject*> broadPhaseCheck = qt->queryRange({pos, size});
-                std::vector<Collider*> colliders;
-                for(int i = 0; i < broadPhaseCheck.size(); i++)
-                {
-                    if(broadPhaseCheck[i]->HasComponent<Collider>())
-                    {
-                        colliders.push_back(broadPhaseCheck[i]->GetComponent<Collider>());
-                    }
-                }
-                rb->_checkCollisions(colliders);
-            }
-
-
             //update system
             if(gameObjectsSimulated.size() > 0) simulatedInterval = simulatedTargetDeltaTime / gameObjectsSimulated.size();
             if(gameObjectsEmulated.size() > 0) emulatedInterval = emulatedTargetDeltaTime / gameObjectsEmulated.size();
-            simulationDistance.center = camera->getCenter();
+            simulationDistance.center = camera.getCenter();
             OnUpdate();
             auto it = gameObjects.begin();
             while(it != gameObjects.end())
@@ -2568,17 +2655,45 @@ private:
             }
 
 
+            //collision handler
+            std::vector<GameObject*> rbs;
+            for(int i = 0; i < gameObjectsSimulated.size(); i++)
+            {
+                if(gameObjectsSimulated[i]->HasComponent<RigidBody>())
+                {
+                    rbs.push_back(gameObjectsSimulated[i]);
+                }
+            }
+            for(int i = 0; i < rbs.size(); i++)
+            {
+                RigidBody* rb = rbs[i]->GetComponent<RigidBody>();
+                Vector2 pos = {rb->transform->position.x + rb->collider->Centre.x, rb->transform->position.y + rb->collider->Centre.y};
+                Vector2 size = {rb->transform->scale.x * rb->collider->Scale.x, rb->transform->scale.y * rb->collider->Scale.y};
+                std::vector<GameObject*> broadPhaseCheck = qt->queryRange({pos, size});
+                std::vector<Collider*> colliders;
+                for(int i = 0; i < broadPhaseCheck.size(); i++)
+                {
+                    if(broadPhaseCheck[i]->HasComponent<Collider>())
+                    {
+                        colliders.push_back(broadPhaseCheck[i]->GetComponent<Collider>());
+                    }
+                }
+                rb->_checkCollisions(colliders);
+            }
+
+
             //rendering
             if(frameTimer >= (1.f / targetFPS))
             {
-                window.setView(*camera);
+                window.setView(camera);
                 window.clear(bgColour);
                 sf::VertexArray* va = new sf::VertexArray(sf::Quads, 0);
                 std::vector<sf::Text>* text = new std::vector<sf::Text>();
-                std::vector<GameObject*> renderedObjects = qt->queryRange({camera->getCenter(), {camera->getSize()}});
+                std::vector<DebugObj*>* debugDraw = new std::vector<DebugObj*>();
+                std::vector<GameObject*> renderedObjects = qt->queryRange({camera.getCenter(), {camera.getSize()}});
                 for(int i = 0; i < renderedObjects.size(); i++)
                 {
-                    renderedObjects[i]->_render(va, &window, text);
+                    renderedObjects[i]->_render(va, &window, text, debugDraw);
                 }
                 if(va->getVertexCount() > 0)
                 {
@@ -2592,6 +2707,26 @@ private:
                 for(int i = 0; i < text->size(); i++)
                 {
                     window.draw(text->at(i));
+                }
+                for(int i = 0; i < debugDraw->size(); i++)
+                {
+                    DebugObj* obj = debugDraw->at(i);
+                    if(obj->rect != nullptr)
+                    {
+                        window.draw(*obj->rect);
+                    }
+                    if(obj->circle != nullptr)
+                    {
+                        window.draw(*obj->circle);
+                    }
+                    if(obj->text != nullptr)
+                    {
+                        window.draw(*obj->text);
+                    }
+                    if(obj->va != nullptr)
+                    {
+                        window.draw(*obj->va);
+                    }
                 }
                 window.display();
                 delete va;
