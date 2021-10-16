@@ -1546,20 +1546,21 @@ public:
 
     void _resolve(Collider* other)
     {
+        if(other == this) return;
         Collision collision = resolve(other);
         if(!collision.HasCollision)
         {
-            IsColliding = false;
             return;
         }
         IsColliding = true;
+        other->IsColliding = true;
         if(_isStatic && other->_isStatic) return;
 
         
         if(_isStatic)
         {
-            other->transform->position.x += collision.Axis.x * collision.Overlap;
-            other->transform->position.y += collision.Axis.y * collision.Overlap;
+            other->transform->position.x -= collision.Axis.x * collision.Overlap;
+            other->transform->position.y -= collision.Axis.y * collision.Overlap;
             return;
         }
 
@@ -1580,6 +1581,8 @@ public:
 
     Vector2 Centre;
     Vector2 Scale;
+    // only applicable for polys
+    AABB bounds;
     float Rotation;
     // only applicable to circles
     float Radius;
@@ -1589,6 +1592,12 @@ public:
     // don't change this, you will break the collision system
     bool _isStatic = true;
     bool IsColliding = false;
+
+    std::vector<Vector2> offsetAxesDebug;
+    std::vector<float> offsetDstDebug;
+    std::vector<Vector2> intersectionsDebug;
+    // this will enable the offsetAxesDebug, offsetDstDebug and intersectionsDebug vectors, which must be manually cleared each frame to prevent a memory leak
+    bool debugInfoEnabled = false;
 
 private:
     Collision resolve(Collider* other)
@@ -1605,12 +1614,22 @@ private:
             Vector2 delta = {v1.x - v2.x, v1.y - v2.y};
             float dst = delta.Mag();
 
+            if(debugInfoEnabled && dst != 0)
+            {
+                Vector2 debugAxis;
+                debugAxis.x = delta.x / dst;
+                debugAxis.y = delta.y / dst;
+                offsetAxesDebug.push_back(debugAxis);
+                offsetDstDebug.push_back(dst);
+            }
 
             if(dst < minDst && dst != 0)
             {
                 Vector2 axis;
-                axis.x = delta.x * (1 / dst);
-                axis.y = delta.y * (1 / dst);
+                axis.x = delta.x / dst;
+                axis.y = delta.y / dst;
+
+                if(debugInfoEnabled) intersectionsDebug.push_back({(axis.x * -Radius) + v1.x, (axis.y * -Radius) + v1.y});
 
                 return {this, other, (minDst - dst), axis};
             }
@@ -1620,18 +1639,17 @@ private:
 
         if(Type == Poly && other->Type == Circle)
         {
-            return circleVsPoly({other->Centre.x + other->transform->position.x, other->Centre.y + other->transform->position.y}, other->Radius, {Centre.x + transform->position.x, Centre.y + transform->position.y}, Vertices, other);
+            return circleVsPoly(v2, other->Radius, v1, Vertices, other);
         }
 
         if(Type == Circle && other->Type == Poly)
         {
-            return circleVsPoly({Centre.x + transform->position.x, Centre.y + transform->position.y}, Radius, {other->Centre.x + other->transform->position.x, other->Centre.y + other->transform->position.y}, other->Vertices, other);
+            return circleVsPoly(v1, Radius, v2, other->Vertices, other);
         }
     }
 
     Collision circleVsPoly(Vector2 circlePos, float radius, Vector2 polyPos, std::vector<Vector2> polygon, Collider* other)
     {
-        std::vector<Vector2> lines;
         std::vector<Vector2> points1;
         std::vector<Vector2> points2;
 
@@ -1642,85 +1660,63 @@ private:
             Vector2 v2;
             if(i == polygon.size() - 1) v2 = polygon[0];
             else v2 = polygon[i + 1];
-            Vector2 line = {v1.x - v2.x, v1.y - v2.y};
-            lines.push_back(line);
             points1.push_back({v1.x + polyPos.x, v1.y + polyPos.y});
             points2.push_back({v2.x + polyPos.x, v2.y + polyPos.y});
         }
 
-        for(int i = 0; i < lines.size(); i++)
-        {
-            Vector2 tmp = {points1[i].x - circlePos.x, points1[i].y - circlePos.y};
-            float a = tmp.Mag();
-            float b = lines[i].Mag();
-            tmp = {points2[i].x - circlePos.x, points2[i].y - circlePos.y};
-            float c = tmp.Mag();
-            float den = ((b * b) + (c * c) - (a * a));
-            float num = (2.f * b * c);
-            float cosA = den / num;
-            float A = acos(cosA); // A = cos^-1((b^2 + c^2 - a^2) / 2bc)
-            float sinA = sin(A);
-            float opposite = sinA * c; // opposite = sin(A) * hyp
+        Collision closest = {this, other, -0xFFFFFFFF, {0, 0}};
 
-            if(opposite < radius) // collision
+        for(int i = 0; i < points1.size(); i++)
+        {
+            float lineX1 = points2[i].x - points1[i].x;
+            float lineY1 = points2[i].y - points1[i].y;
+
+            float lineX2 = circlePos.x - points1[i].x;
+            float lineY2 = circlePos.y - points1[i].y;
+
+            float edgeLength = lineX1 * lineX1 + lineY1 * lineY1;
+
+            float t = std::max(0.f, std::min(edgeLength, (lineX1 * lineX2 + lineY1 * lineY2))) / edgeLength;
+
+            float closestX = points1[i].x + t * lineX1;
+            float closestY = points1[i].y + t * lineY1;
+
+            Vector2 delta;
+            delta.x = circlePos.x - closestX;
+            delta.y = circlePos.y - closestY;
+            float distance = delta.Mag();
+            delta.x /= distance;
+            delta.y /= distance;
+
+            if(debugInfoEnabled)
             {
-                float cosA = cos(A);
-                float adjacent = cosA * c; // adjacent = cos(A) * hyp
-                float percent = adjacent / b;
-                Vector2 vec = points2[i];
-                Vector2 closestPoint = vec.Lerp(points1[i], percent);
-                Vector2 collisionAxis = {closestPoint.x - circlePos.x, closestPoint.y - circlePos.y};
-                float overlap = radius - collisionAxis.Mag();
-                float cmag = collisionAxis.Mag();
-                collisionAxis = {-collisionAxis.x / cmag, -collisionAxis.y / cmag};
-                if(overlap > 0)
+                offsetAxesDebug.push_back(delta);
+                offsetDstDebug.push_back(distance);
+            }
+
+            if(other->debugInfoEnabled)
+            {
+                other->offsetAxesDebug.push_back(delta);
+                other->offsetDstDebug.push_back(-distance);
+            }
+
+            if(distance < radius)
+            {
+                if(debugInfoEnabled) intersectionsDebug.push_back({closestX, closestY});
+                if(other->debugInfoEnabled) other->intersectionsDebug.push_back({closestX, closestY});
+
+                if((radius - distance) > closest.Overlap)
                 {
-                    Vector2 v1 = points1[i];
-                    Vector2 v2 = points2[i];
-                    bool check1, check2;
-                    if(v1.x <= v2.x)
-                    {
-                        check1 = (v1.x <= closestPoint.x && closestPoint.x <= v2.x);
-                        std::cout << "1:1 " << check1 << "\n";
-                    }
-                    else
-                    {
-                        check1 = (v1.x >= closestPoint.x && closestPoint.x >= v2.x);
-                        std::cout << "1:2 " << check1 << "\n";
-                    }
-                    if(v1.y <= v2.y)
-                    {
-                        check2 = (v1.y <= closestPoint.y && closestPoint.y <= v2.y);
-                        std::cout << "2:1 " << check2 << "\n";
-                    }
-                    else
-                    {
-                        check2 = (v1.y >= closestPoint.y && closestPoint.y >= v2.y);
-                        std::cout << "2:2 " << check2 << "\n";
-                    }
-                    if(check1 && check2) return {this, other, overlap, collisionAxis};
-                    Vector2 d1 = {v1.x - circlePos.x, v1.y - circlePos.y};
-                    Vector2 d2 = {v2.x - circlePos.x, v2.y - circlePos.y};
-                    if(d1.Mag() < radius)
-                    {
-                        float dst = radius - d1.Mag();
-                        float d1mag = d1.Mag();
-                        d1.x /= -d1mag;
-                        d1.y /= -d1mag;
-                        return {this, other, dst, d1};
-                    }
-                    if(d2.Mag() < radius)
-                    {
-                        float dst = radius - d2.Mag();
-                        float d2mag = d2.Mag();
-                        d2.x /= -d2mag;
-                        d2.y /= -d2mag;
-                        return {this, other, dst, d2};
-                    }
+                    closest.Overlap = (radius - distance);
+                    closest.Axis = delta;
                 }
             }
         }
-        return {this, other, false};
+        if(closest.Overlap <= 0)
+        {
+            return {this, other, false};
+        }
+        return closest;
     }
 };
 
@@ -2659,6 +2655,10 @@ private:
             std::vector<GameObject*> rbs;
             for(int i = 0; i < gameObjectsSimulated.size(); i++)
             {
+                if(gameObjectsSimulated[i]->HasComponent<Collider>())
+                {
+                    gameObjectsSimulated[i]->GetComponent<Collider>()->IsColliding = false;
+                }
                 if(gameObjectsSimulated[i]->HasComponent<RigidBody>())
                 {
                     rbs.push_back(gameObjectsSimulated[i]);
@@ -2668,7 +2668,9 @@ private:
             {
                 RigidBody* rb = rbs[i]->GetComponent<RigidBody>();
                 Vector2 pos = {rb->transform->position.x + rb->collider->Centre.x, rb->transform->position.y + rb->collider->Centre.y};
-                Vector2 size = {rb->transform->scale.x * rb->collider->Scale.x, rb->transform->scale.y * rb->collider->Scale.y};
+                Vector2 size;
+                if(rb->collider->Type == Collider::Poly) size = {rb->transform->scale.x * rb->collider->Scale.x * rb->collider->bounds.halfDimension.x * 2.f, rb->transform->scale.y * rb->collider->Scale.y * rb->collider->bounds.halfDimension.y * 2.f};
+                else size = {rb->collider->Radius * 1.2f, rb->collider->Radius * 1.2f};
                 std::vector<GameObject*> broadPhaseCheck = qt->queryRange({pos, size});
                 std::vector<Collider*> colliders;
                 for(int i = 0; i < broadPhaseCheck.size(); i++)
