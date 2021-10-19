@@ -140,18 +140,32 @@ struct AABB
         this->halfDimension = halfDimension;
     }
 
-    bool ContainsPoint(Vector2 point)
+    bool ContainsPoint(Vector2 point = {0, 0})
     {
-        return !(point.x < center.x - halfDimension.x || point.x > center.x + halfDimension.x || point.y < center.y - halfDimension.y || point.y > center.y + halfDimension.y);
+        if(point.x < center.x - halfDimension.x) return false;
+        if(point.x > center.x + halfDimension.x) return false;
+        if(point.y < center.y - halfDimension.y) return false;
+        if(point.y > center.y + halfDimension.y) return false;
+        return true;
     }
 
-    bool Intersects(AABB other)
+    bool Intersects(AABB other = {{0, 0}, {0, 0}})
     {
-        return ((other.center.x - other.halfDimension.x > center.x - halfDimension.x && other.center.x - halfDimension.x < center.x + halfDimension.x) || (other.center.x + halfDimension.x > center.x - halfDimension.x && other.center.x + halfDimension.x < center.x + halfDimension.x) || (other.center.y - halfDimension.y > center.y - halfDimension.y && other.center.y - halfDimension.y < center.y + halfDimension.y) || (other.center.y + halfDimension.y > center.y - halfDimension.y && other.center.y + halfDimension.y < center.y + halfDimension.y));
+        if(ContainsPoint({other.center.x + other.halfDimension.x, other.center.y + other.halfDimension.y})) return true;
+        if(ContainsPoint({other.center.x + other.halfDimension.x, other.center.y - other.halfDimension.y})) return true;
+        if(ContainsPoint({other.center.x - other.halfDimension.x, other.center.y - other.halfDimension.y})) return true;
+        if(ContainsPoint({other.center.x - other.halfDimension.x, other.center.y + other.halfDimension.y})) return true;
+
+        if(other.ContainsPoint({center.x + halfDimension.x, center.y + halfDimension.y})) return true;
+        if(other.ContainsPoint({center.x + halfDimension.x, center.y - halfDimension.y})) return true;
+        if(other.ContainsPoint({center.x - halfDimension.x, center.y - halfDimension.y})) return true;
+        if(other.ContainsPoint({center.x - halfDimension.x, center.y + halfDimension.y})) return true;
+        
+        return false;
     }
 
-    Vector2 center;
-    Vector2 halfDimension;
+    Vector2 center = {0, 0};
+    Vector2 halfDimension = {0, 0};
 };
 
 struct Sprite
@@ -868,7 +882,7 @@ class GameObject;
 class QuadTree
 {
 public:
-    #define QTCAPACITY 4
+    #define QTCAPACITY 128
 
     AABB boundary;
 
@@ -889,7 +903,10 @@ public:
 
     bool insert(GameObject* obj, AABB pos)
     {
-        if(!boundary.Intersects(pos)) return false;
+        if(!pos.Intersects(boundary))
+        {
+            return false;
+        }
         if(numObjects < QTCAPACITY)
         {
             objects[numObjects] = obj;
@@ -924,19 +941,13 @@ public:
     {
         std::vector<GameObject*> result;
 
-        if(!boundary.Intersects(range) && !range.Intersects(boundary))
+        if(!boundary.Intersects(range))
         {
-            std::cout << "does not intersect range\n";
             return result;
         }
 
         for(int i = 0; i < numObjects; i++)
         {
-            if(positions[i].Intersects(range))
-            {
-                result.push_back(objects[i]);
-                continue;
-            }
             if(range.Intersects(positions[i])) result.push_back(objects[i]);
         }
 
@@ -1089,6 +1100,13 @@ public:
         float tmp = dst - src;
         tmp *= percent;
         return src + tmp;
+    }
+
+    float Clamp(float value, float min, float max)
+    {
+        if(value < min) value = min;
+        if(value > max) value = max;
+        return value;
     }
 
 private:
@@ -1362,8 +1380,6 @@ public:
         music.play();
     }
 
-
-
 private:
     std::map<std::string, sf::SoundBuffer> sounds;
     std::map<std::string, sf::Sound> playing;
@@ -1580,7 +1596,7 @@ public:
     }
 
     Vector2 Centre;
-    Vector2 Scale;
+    Vector2 Scale = {1, 1};
     // only applicable for polys
     AABB bounds;
     float Rotation;
@@ -1596,12 +1612,14 @@ public:
     std::vector<Vector2> offsetAxesDebug;
     std::vector<float> offsetDstDebug;
     std::vector<Vector2> intersectionsDebug;
-    // this will enable the offsetAxesDebug, offsetDstDebug and intersectionsDebug vectors, which must be manually cleared each frame to prevent a memory leak
+    std::vector<GameObject*> checkedObjectsDebug;
+    // this will enable the offsetAxesDebug, offsetDstDebug, intersectionsDebug and checkedObjectsDebug vectors, which must be manually cleared each frame to prevent a memory leak
     bool debugInfoEnabled = false;
 
 private:
     Collision resolve(Collider* other)
     {
+        if(debugInfoEnabled) checkedObjectsDebug.push_back(other->self);
         Vector2 v1 = {Centre.x + transform->position.x, Centre.y + transform->position.y};
         Vector2 v2 = {other->Centre.x + other->transform->position.x, other->Centre.y + other->transform->position.y};
 
@@ -1631,7 +1649,7 @@ private:
 
                 if(debugInfoEnabled) intersectionsDebug.push_back({(axis.x * -Radius) + v1.x, (axis.y * -Radius) + v1.y});
 
-                return {this, other, (minDst - dst), axis};
+                return {this, other, (minDst - dst) + 1.f, axis};
             }
 
             return {this, other, false};
@@ -1705,9 +1723,9 @@ private:
                 if(debugInfoEnabled) intersectionsDebug.push_back({closestX, closestY});
                 if(other->debugInfoEnabled) other->intersectionsDebug.push_back({closestX, closestY});
 
-                if((radius - distance) > closest.Overlap)
+                if((radius - distance) + 1.f > closest.Overlap)
                 {
-                    closest.Overlap = (radius - distance);
+                    closest.Overlap = (radius - distance) + 1.f;
                     closest.Axis = delta;
                 }
             }
@@ -2338,11 +2356,13 @@ public:
         }
         Vector2 halfDim;
         if(HasComponent<SpriteRenderer>()) halfDim = GetComponent<SpriteRenderer>()->sprite.size;
+        else halfDim = {1, 1};
         halfDim.x /= 2.f;
         halfDim.y /= 2.f;
         if(!qt->insert(this, AABB(transform->position, {halfDim.x * transform->scale.x, halfDim.y * transform->scale.y})))
         {
             std::cout << "Error: could not insert object into the quadtree" << std::endl;
+            std::cout << "OBJECTS     | " << qt->getCountAll() << "\n"; 
             std::cout << "POSITION    | " << transform->position <<
                        "\nSCALE       | " << transform->scale <<
                        "\nROTATION    | " << transform->rotation <<
@@ -2520,7 +2540,7 @@ public:
     unsigned int windowWidth = 640, windowHeight = 480, frameRateLimit = 60;
     bool fullscreen = false, vsync = true, showFps = true;
     sf::Color bgColour = sf::Color::Black;
-    AABB simulationDistance = AABB({0, 0}, {windowWidth, windowHeight});
+    AABB simulationDistance = AABB({0, 0}, {windowWidth * 0.6, windowHeight * 0.6});
     // the time between updates for objects outside of the simulation distance
     float emulatedTargetDeltaTime = 1.f;
     // the time between updates for objects inside of the simulation distance
@@ -2561,7 +2581,9 @@ private:
         time.deltaTime = 1;
         float timer = 0;
         float refreshTimer = 0;
+        float collisionTimer = 0;
         float frameTimer = 0;
+        float actualFrameTimer = 0.f;
         float fpsLast = 0;
         qt = new QuadTree({{0, 0}, {100000, 100000}});
         input._setup();
@@ -2570,37 +2592,44 @@ private:
 
         while(window.isOpen())
         {
-            //quadtree manager
-            if(refreshTimer >= simulatedTargetDeltaTime)
+            float timeBetweenFrames = 1.f / frameRateLimit;
+            if(vsync) actualFrameTimer = 0;
+            if(actualFrameTimer >= timeBetweenFrames || vsync)
             {
-                qt->clear();
-                auto it = gameObjects.begin();
-                while(it != gameObjects.end())
+                actualFrameTimer -= timeBetweenFrames;
+
+                //quadtree manager
+                if(refreshTimer >= simulatedTargetDeltaTime)
                 {
-                    if(gameObjects[it->first]->enabled) gameObjects[it->first]->_qt(qt);
-                    gameObjects[it->first]->simulated = false;
-                    it++;
+                    qt->clear();
+                    auto it = gameObjects.begin();
+                    while(it != gameObjects.end())
+                    {
+                        if(gameObjects[it->first]->enabled) gameObjects[it->first]->_qt(qt);
+                        gameObjects[it->first]->simulated = false;
+                        it++;
+                    }
+                    gameObjectsSimulated = qt->queryRange(simulationDistance);
+                    for(int i = 0; i < gameObjectsSimulated.size(); i++)
+                    {
+                        if(gameObjectsSimulated[i] == nullptr) exit(2);
+                        gameObjectsSimulated[i]->simulated = true;
+                    }
+                    it = gameObjects.begin();
+                    while(it != gameObjects.end())
+                    {
+                        if(!gameObjects[it->first]->simulated && gameObjects[it->first]->enabled) gameObjectsEmulated.push_back(gameObjects[it->first]);
+                        it++;
+                    }
+                    refreshTimer -= simulatedTargetDeltaTime;
                 }
-                gameObjectsSimulated = qt->queryRange(simulationDistance);
-                for(int i = 0; i < gameObjectsSimulated.size(); i++)
-                {
-                    if(gameObjectsSimulated[i] == nullptr) exit(2);
-                    gameObjectsSimulated[i]->simulated = true;
-                }
-                it = gameObjects.begin();
-                while(it != gameObjects.end())
-                {
-                    if(!gameObjects[it->first]->simulated && gameObjects[it->first]->enabled) gameObjectsEmulated.push_back(gameObjects[it->first]);
-                    it++;
-                }
-                refreshTimer -= simulatedTargetDeltaTime;
-            }
 
 
-            //event handler
-            if(simulatedTimer >= simulatedTargetDeltaTime)
-            {
-                input._update();
+                //event handler
+                if(simulatedTimer >= simulatedTargetDeltaTime)
+                {
+                    input._update();
+                }
                 sf::Event event;
                 while(window.pollEvent(event))
                 {
@@ -2610,130 +2639,144 @@ private:
                     }
                     input._poll(event);
                 }
-            }
 
 
-            //update system
-            if(gameObjectsSimulated.size() > 0) simulatedInterval = simulatedTargetDeltaTime / gameObjectsSimulated.size();
-            if(gameObjectsEmulated.size() > 0) emulatedInterval = emulatedTargetDeltaTime / gameObjectsEmulated.size();
-            simulationDistance.center = camera.getCenter();
-            OnUpdate();
-            auto it = gameObjects.begin();
-            while(it != gameObjects.end())
-            {
-                if(gameObjects[it->first]->enabled) gameObjects[it->first]->_timer += time.deltaTime;
-                it++;
-            }
-            if(gameObjectsSimulated.size() > 0)
-            {
-                while(simulatedTimer >= simulatedInterval)
+                //update system
+                if(gameObjectsSimulated.size() > 0) simulatedInterval = simulatedTargetDeltaTime / gameObjectsSimulated.size();
+                if(gameObjectsEmulated.size() > 0) emulatedInterval = emulatedTargetDeltaTime / gameObjectsEmulated.size();
+                simulationDistance.center = camera.getCenter();
+                simulationDistance.halfDimension = {camera.getSize().x * 0.55f, camera.getSize().y * 0.55f};
+                OnUpdate();
+                auto it = gameObjects.begin();
+                while(it != gameObjects.end())
                 {
-                    if(simulatedIT >= gameObjectsSimulated.size()) simulatedIT = 0;
-                    // std::cout << "UPDATE: " << simulatedIT << "\n";
-                    gameObjectsSimulated[simulatedIT]->dt = gameObjectsSimulated[simulatedIT]->_timer;
-                    gameObjectsSimulated[simulatedIT]->_timer = 0;
-                    gameObjectsSimulated[simulatedIT]->_update();
-                    simulatedIT++;
-                    simulatedTimer -= simulatedInterval;
+                    if(gameObjects[it->first]->enabled) gameObjects[it->first]->_timer += time.deltaTime;
+                    it++;
                 }
-            }
-            if(gameObjectsEmulated.size() > 0)
-            {
-                while(emulatedTimer > emulatedInterval)
+                if(gameObjectsSimulated.size() > 0)
                 {
-                    if(emulatedIT >= gameObjectsEmulated.size()) emulatedIT = 0;
-                    gameObjectsEmulated[emulatedIT]->dt = gameObjectsEmulated[emulatedIT]->_timer;
-                    gameObjectsEmulated[emulatedIT]->_timer = 0;
-                    gameObjectsEmulated[emulatedIT]->_update();
-                    emulatedIT++;
-                    emulatedTimer -= emulatedInterval;
+                    while(simulatedTimer >= simulatedInterval)
+                    {
+                        if(simulatedIT >= gameObjectsSimulated.size()) simulatedIT = 0;
+                        gameObjectsSimulated[simulatedIT]->dt = gameObjectsSimulated[simulatedIT]->_timer;
+                        gameObjectsSimulated[simulatedIT]->_timer = 0;
+                        gameObjectsSimulated[simulatedIT]->_update();
+                        simulatedIT++;
+                        simulatedTimer -= simulatedInterval;
+                    }
                 }
-            }
+                if(gameObjectsEmulated.size() > 0)
+                {
+                    while(emulatedTimer > emulatedInterval)
+                    {
+                        if(emulatedIT >= gameObjectsEmulated.size()) emulatedIT = 0;
+                        gameObjectsEmulated[emulatedIT]->dt = gameObjectsEmulated[emulatedIT]->_timer;
+                        gameObjectsEmulated[emulatedIT]->_timer = 0;
+                        gameObjectsEmulated[emulatedIT]->_update();
+                        emulatedIT++;
+                        emulatedTimer -= emulatedInterval;
+                    }
+                }
 
 
-            //collision handler
-            std::vector<GameObject*> rbs;
-            for(int i = 0; i < gameObjectsSimulated.size(); i++)
-            {
-                if(gameObjectsSimulated[i]->HasComponent<Collider>())
+                //collision handler
+                if(collisionTimer >= simulatedTargetDeltaTime)
                 {
-                    gameObjectsSimulated[i]->GetComponent<Collider>()->IsColliding = false;
-                }
-                if(gameObjectsSimulated[i]->HasComponent<RigidBody>())
-                {
-                    rbs.push_back(gameObjectsSimulated[i]);
-                }
-            }
-            for(int i = 0; i < rbs.size(); i++)
-            {
-                RigidBody* rb = rbs[i]->GetComponent<RigidBody>();
-                Vector2 pos = {rb->transform->position.x + rb->collider->Centre.x, rb->transform->position.y + rb->collider->Centre.y};
-                Vector2 size;
-                if(rb->collider->Type == Collider::Poly) size = {rb->transform->scale.x * rb->collider->Scale.x * rb->collider->bounds.halfDimension.x * 2.f, rb->transform->scale.y * rb->collider->Scale.y * rb->collider->bounds.halfDimension.y * 2.f};
-                else size = {rb->collider->Radius * 1.2f, rb->collider->Radius * 1.2f};
-                std::vector<GameObject*> broadPhaseCheck = qt->queryRange({pos, size});
-                std::vector<Collider*> colliders;
-                for(int i = 0; i < broadPhaseCheck.size(); i++)
-                {
-                    if(broadPhaseCheck[i]->HasComponent<Collider>())
+                    std::vector<GameObject*> rbs;
+                    for(int i = 0; i < gameObjectsSimulated.size(); i++)
                     {
-                        colliders.push_back(broadPhaseCheck[i]->GetComponent<Collider>());
+                        if(gameObjectsSimulated[i]->HasComponent<Collider>())
+                        {
+                            gameObjectsSimulated[i]->GetComponent<Collider>()->IsColliding = false;
+                        }
+                        if(gameObjectsSimulated[i]->HasComponent<RigidBody>())
+                        {
+                            rbs.push_back(gameObjectsSimulated[i]);
+                        }
                     }
+                    for(int i = 0; i < rbs.size(); i++)
+                    {
+                        RigidBody* rb = rbs[i]->GetComponent<RigidBody>();
+                        Vector2 pos = {rb->transform->position.x + rb->collider->Centre.x, rb->transform->position.y + rb->collider->Centre.y};
+                        Vector2 size;
+                        if(rb->collider->Type == Collider::Poly) size = {rb->transform->scale.x * rb->collider->Scale.x * rb->collider->bounds.halfDimension.x * 2.f, rb->transform->scale.y * rb->collider->Scale.y * rb->collider->bounds.halfDimension.y * 2.f};
+                        else size = {rb->collider->Radius * 1.5f * rb->transform->scale.x * rb->collider->Scale.x, rb->collider->Radius * 1.5f * rb->transform->scale.y * rb->collider->Scale.y};
+                        size.x *= 2.f;
+                        size.y *= 2.f;
+                        std::vector<GameObject*> broadPhaseCheck = qt->queryRange({pos, size});
+                        std::vector<Collider*> colliders;
+                        for(int i = 0; i < broadPhaseCheck.size(); i++)
+                        {
+                            if(broadPhaseCheck[i]->HasComponent<Collider>())
+                            {
+                                colliders.push_back(broadPhaseCheck[i]->GetComponent<Collider>());
+                            }
+                        }
+                        rb->_checkCollisions(colliders);
+                    }
+                    collisionTimer -= simulatedTargetDeltaTime;
                 }
-                rb->_checkCollisions(colliders);
-            }
 
 
-            //rendering
-            if(frameTimer >= (1.f / targetFPS))
-            {
-                window.setView(camera);
-                window.clear(bgColour);
-                sf::VertexArray* va = new sf::VertexArray(sf::Quads, 0);
-                std::vector<sf::Text>* text = new std::vector<sf::Text>();
-                std::vector<DebugObj*>* debugDraw = new std::vector<DebugObj*>();
-                std::vector<GameObject*> renderedObjects = qt->queryRange({camera.getCenter(), {camera.getSize()}});
-                for(int i = 0; i < renderedObjects.size(); i++)
+                //rendering
+                if(frameTimer >= (1.f / targetFPS))
                 {
-                    renderedObjects[i]->_render(va, &window, text, debugDraw);
+                    window.setView(camera);
+                    window.clear(bgColour);
+                    sf::VertexArray* va = new sf::VertexArray(sf::Quads, 0);
+                    std::vector<sf::Text>* text = new std::vector<sf::Text>();
+                    std::vector<DebugObj*>* debugDraw = new std::vector<DebugObj*>();
+                    std::cout << gameObjectsSimulated.size() << "\n";
+                    for(int i = 0; i < gameObjectsSimulated.size(); i++)
+                    {
+                        gameObjectsSimulated[i]->_render(va, &window, text, debugDraw);
+                    }
+                    if(va->getVertexCount() > 0)
+                    {
+                        sf::RenderStates state = sf::RenderStates::Default;
+                        if(texLoaded)
+                        {
+                            state.texture = &tex;
+                        }
+                        window.draw(&va[0][0], va->getVertexCount(), sf::Quads, state);
+                    }
+                    delete va;
+                    for(int i = 0; i < text->size(); i++)
+                    {
+                        window.draw(text->at(i));
+                    }
+                    text->clear();
+                    delete text;
+                    for(int i = 0; i < debugDraw->size(); i++)
+                    {
+                        DebugObj* obj = debugDraw->at(i);
+                        if(obj->rect != nullptr)
+                        {
+                            window.draw(*obj->rect);
+                            delete obj->rect;
+                        }
+                        if(obj->circle != nullptr)
+                        {
+                            window.draw(*obj->circle);
+                            delete obj->circle;
+                        }
+                        if(obj->text != nullptr)
+                        {
+                            window.draw(*obj->text);
+                            delete obj->text;
+                        }
+                        if(obj->va != nullptr)
+                        {
+                            window.draw(*obj->va);
+                            delete obj->va;
+                        }
+                        delete obj;
+                    }
+                    window.display();
+                    frameTimer -= (1.f / targetFPS);
+                    delete debugDraw;
                 }
-                if(va->getVertexCount() > 0)
-                {
-                    sf::RenderStates state = sf::RenderStates::Default;
-                    if(texLoaded)
-                    {
-                        state.texture = &tex;
-                    }
-                    window.draw(&va[0][0], va->getVertexCount(), sf::Quads, state);
-                }
-                for(int i = 0; i < text->size(); i++)
-                {
-                    window.draw(text->at(i));
-                }
-                for(int i = 0; i < debugDraw->size(); i++)
-                {
-                    DebugObj* obj = debugDraw->at(i);
-                    if(obj->rect != nullptr)
-                    {
-                        window.draw(*obj->rect);
-                    }
-                    if(obj->circle != nullptr)
-                    {
-                        window.draw(*obj->circle);
-                    }
-                    if(obj->text != nullptr)
-                    {
-                        window.draw(*obj->text);
-                    }
-                    if(obj->va != nullptr)
-                    {
-                        window.draw(*obj->va);
-                    }
-                }
-                window.display();
-                delete va;
-                delete text;
-                frameTimer -= (1.f / targetFPS);
+                sleep(timeBetweenFrames * 0.001f);
             }
 
 
@@ -2747,6 +2790,8 @@ private:
             simulatedTimer += time.deltaTime;
             emulatedTimer += time.deltaTime;
             frameTimer += time.deltaTime;
+            collisionTimer += time.deltaTime;
+            actualFrameTimer += time.deltaTime;
 
             timer += time.deltaTime;
             if(timer >= 0.5)
