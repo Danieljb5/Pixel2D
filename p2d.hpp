@@ -55,6 +55,12 @@ struct Vector2
     {
         x = vec.x, y = vec.y;
     }
+    
+    Vector2(std::pair<float, float> vec)
+    {
+        x = vec.first;
+        y = vec.second;
+    }
 
     friend std::ostream &operator << (std::ostream &os, const Vector2 vec)
     {
@@ -62,32 +68,34 @@ struct Vector2
         return os;
     }
 
-    friend Vector2 &operator * (Vector2 vec, float f)
+    void Scale(float f)
     {
-        vec.x *= f;
-        vec.y *= f;
-        return vec;
+        x *= f;
+        y *= f;
     }
-
-    friend Vector2 &operator / (Vector2 vec, float f)
+    
+    void Add(Vector2 vec)
     {
-        vec.x /= f;
-        vec.y /= f;
-        return vec;
+        x += vec.x;
+        y += vec.y;
     }
-
-    friend Vector2 &operator + (Vector2 vecA, Vector2 vecB)
+    
+    void Sub(Vector2 vec)
     {
-        vecA.x += vecB.x;
-        vecA.y += vecB.y;
-        return vecA;
+        x -= vec.x;
+        y -= vec.y;
     }
-
-    friend Vector2 &operator - (Vector2 vecA, Vector2 vecB)
+    
+    void Add(Vector2* vec)
     {
-        vecA.x -= vecB.x;
-        vecA.y -= vecB.y;
-        return vecA;
+        x += vec->x;
+        y += vec->y;
+    }
+    
+    void Sub(Vector2* vec)
+    {
+        x -= vec->x;
+        y -= vec->y;
     }
 
     float Dot(Vector2 vec)
@@ -112,60 +120,14 @@ struct Vector2
 
     Vector2 Lerp(Vector2 destination, float percent)
     {
-        Vector2 tmp;
-        tmp.x = destination.x - this->x;
-        tmp.y = destination.y - this->y;
-        tmp.x *= percent;
-        tmp.y *= percent;
-        this->x += tmp.x;
-        this->y += tmp.y;
+        destination.Sub(this);
+        tmp.Scale(percent);
+        Add(tmp);
         return {x, y};
     }
 
     float x = 0;
     float y = 0;
-};
-
-struct AABB
-{
-    AABB()
-    {
-        center = {0, 0};
-        halfDimension = {0, 0};
-    }
-
-    AABB(Vector2 center, Vector2 halfDimension)
-    {
-        this->center = center;
-        this->halfDimension = halfDimension;
-    }
-
-    bool ContainsPoint(Vector2 point = {0, 0})
-    {
-        if(point.x < center.x - halfDimension.x) return false;
-        if(point.x > center.x + halfDimension.x) return false;
-        if(point.y < center.y - halfDimension.y) return false;
-        if(point.y > center.y + halfDimension.y) return false;
-        return true;
-    }
-
-    bool Intersects(AABB other = {{0, 0}, {0, 0}})
-    {
-        if(ContainsPoint({other.center.x + other.halfDimension.x, other.center.y + other.halfDimension.y})) return true;
-        if(ContainsPoint({other.center.x + other.halfDimension.x, other.center.y - other.halfDimension.y})) return true;
-        if(ContainsPoint({other.center.x - other.halfDimension.x, other.center.y - other.halfDimension.y})) return true;
-        if(ContainsPoint({other.center.x - other.halfDimension.x, other.center.y + other.halfDimension.y})) return true;
-
-        if(other.ContainsPoint({center.x + halfDimension.x, center.y + halfDimension.y})) return true;
-        if(other.ContainsPoint({center.x + halfDimension.x, center.y - halfDimension.y})) return true;
-        if(other.ContainsPoint({center.x - halfDimension.x, center.y - halfDimension.y})) return true;
-        if(other.ContainsPoint({center.x - halfDimension.x, center.y + halfDimension.y})) return true;
-        
-        return false;
-    }
-
-    Vector2 center = {0, 0};
-    Vector2 halfDimension = {0, 0};
 };
 
 struct Sprite
@@ -879,127 +841,50 @@ private:
 
 class GameObject;
 
-class QuadTree
+class Chunk
 {
 public:
-    #define QTCAPACITY 128
-
-    AABB boundary;
-
-    GameObject* objects[QTCAPACITY];
-    AABB positions[QTCAPACITY];
-    int numObjects = 0;
-    bool divided = false;
-
-    QuadTree* northWest = nullptr;
-    QuadTree* northEast = nullptr;
-    QuadTree* southWest = nullptr;
-    QuadTree* southEast = nullptr;
+    Chunk() {}
+    ~Chunk() {}
     
-    QuadTree(AABB boundary)
-    {
-        this->boundary = boundary;
-    }
-
-    bool insert(GameObject* obj, AABB pos)
-    {
-        if(!pos.Intersects(boundary))
-        {
-            return false;
-        }
-        if(numObjects < QTCAPACITY)
-        {
-            objects[numObjects] = obj;
-            positions[numObjects] = pos;
-            numObjects++;
-            return true;
-        }
-
-        if(!divided) subdivide();
-
-        if(northWest->insert(obj, pos)) return true;
-        if(northEast->insert(obj, pos)) return true;
-        if(southWest->insert(obj, pos)) return true;
-        if(southWest->insert(obj, pos)) return true;
-        return false;
-    }
-
-    void subdivide()
-    {
-        AABB nw = {{boundary.center.x - (boundary.center.x / 2.f), boundary.center.y - (boundary.center.y / 2.f)}, {boundary.halfDimension.x / 2.f, boundary.halfDimension.y / 2.f}};
-        AABB ne = {{boundary.center.x - (boundary.center.x / 2.f), boundary.center.y + (boundary.center.y / 2.f)}, {boundary.halfDimension.x / 2.f, boundary.halfDimension.y / 2.f}};
-        AABB sw = {{boundary.center.x + (boundary.center.x / 2.f), boundary.center.y - (boundary.center.y / 2.f)}, {boundary.halfDimension.x / 2.f, boundary.halfDimension.y / 2.f}};
-        AABB se = {{boundary.center.x + (boundary.center.x / 2.f), boundary.center.y + (boundary.center.y / 2.f)}, {boundary.halfDimension.x / 2.f, boundary.halfDimension.y / 2.f}};
-        northWest = new QuadTree(nw);
-        northEast = new QuadTree(ne);
-        southWest = new QuadTree(sw);
-        southEast = new QuadTree(se);
-        divided = true;
-    }
-
-    std::vector<GameObject*> queryRange(AABB range)
-    {
-        std::vector<GameObject*> result;
-
-        if(!boundary.Intersects(range))
-        {
-            return result;
-        }
-
-        for(int i = 0; i < numObjects; i++)
-        {
-            if(range.Intersects(positions[i])) result.push_back(objects[i]);
-        }
-
-        if(!divided) return result;
-
-        std::vector<GameObject*> temp;
-        temp = northWest->queryRange(range);
-        result.insert(result.end(), temp.begin(), temp.end());
-        temp = northEast->queryRange(range);
-        result.insert(result.end(), temp.begin(), temp.end());
-        temp = southWest->queryRange(range);
-        result.insert(result.end(), temp.begin(), temp.end());
-        temp = southEast->queryRange(range);
-        result.insert(result.end(), temp.begin(), temp.end());
-
-        return result;
-    }
-
-    int getCountAll()
-    {
-        int result = numObjects;
-
-        if(!divided) return result;
-
-        result += northWest->getCountAll();
-        result += northEast->getCountAll();
-        result += southWest->getCountAll();
-        result += southEast->getCountAll();
-
-        return result;
-    }
-
-    void clear()
-    {
-        numObjects = 0;
-
-        if(divided)
-        {
-            northWest->clear();
-            northEast->clear();
-            southWest->clear();
-            southEast->clear();
-
-            delete northWest;
-            delete northEast;
-            delete southWest;
-            delete southEast;
-            divided = false;
-        }
-    }
+    GameObject* objects[1024];
 };
 
+class SpatialGridHash
+{
+public:
+    SpatialGridHash() {}
+    ~SpatialGridHash()
+    {
+        clear();
+    }
+    
+    void Update()
+    {
+        auto it = chunks.begin();
+        while(it != chunks.end())
+        {
+            Chunk* chunk = chunks.at(it->first);
+            for(int i = 0; i < 1024; i++)
+            {
+                if(chunk->objects[i] == nullptr) continue;
+                if(chunk->objects[i]->_chunkPos == GetChunkPos(chunk->objects[i])) continue;
+                Update(chunk->objects[i]);
+            }
+            it++;
+        }
+    }
+    
+    void Update(GameObject* object)
+    {
+        remove(object);
+        add(object);
+    }
+    
+private:
+    std::map<std::pair<int, int>, Chunk*> chunks;
+};
+    
 class Time
 {
 public:
@@ -1047,7 +932,8 @@ public:
         uint32_t m1 = (tmp >> 32) ^ tmp;
         tmp = (uint64_t)m1 * 0x12fad5c9;
         uint32_t m2 = (tmp >> 32) ^ tmp;
-        return (Sigmoid((long double)m2 / (long double)2147483648) * (max - min)) + min;
+        float result = m2 / MAX_FLOAT;
+        return (result * (max - min)) + min;
     }
 
     double Random(double min, double max)
@@ -1058,7 +944,8 @@ public:
         uint32_t m1 = (tmp >> 32) ^ tmp;
         tmp = (uint64_t)m1 * 0x12fad5c9;
         uint32_t m2 = (tmp >> 32) ^ tmp;
-        return (Sigmoid((long double)m2 / (long double)2147483648.f) * (max - min)) + min;
+        double result = m2 / MAX_FLOAT;
+        return (result * (max - min)) + min;
     }
 
     void Seed(uint32_t seed)
@@ -1081,8 +968,7 @@ public:
         float s = sin(Angle);
         float c = cos(Angle);
 
-        Vec.x -= Origin.x;
-        Vec.y -= Origin.y;
+        Vec.Sub(Origin);
 
         float x = Vec.x * c - Vec.y * s;
         float y = Vec.x * s + Vec.y * c;
@@ -2402,10 +2288,10 @@ public:
         }
     }
 
-    uint32_t _generateUniqueID(std::map<uint32_t, GameObject*> objects)
+    uint32_t _generateUniqueID(std::map<uint32_t, GameObject*>* objects)
     {
         uint32_t id = std::chrono::system_clock::now().time_since_epoch().count();
-        while(objects.count(id) != 0)
+        while(objects->count(id) != 0)
         {
             id += 0xe120fc15;
             uint64_t tmp;
